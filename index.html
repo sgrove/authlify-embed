@@ -1,12 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="src/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite React TypeScript Tailwind Starter</title>
+    <meta charset="utf-8" />
+    <title>Sean Grove | Labs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0e1e25" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://www.netlify.com/img/global/favicon/apple-touch-icon.png"
+    />
+    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
+    <link
+      rel="stylesheet"
+      href="https://d33wubrfki0l68.cloudfront.net/css/d960df85f732cd58a03c925bb0fd8dcefdfae03f/style/app.css"
+    />
+
+    <style id="inert-style">
+      [inert] {
+        pointer-events: none;
+        cursor: default;
+      }
+
+      [inert],
+      [inert] * {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+    </style>
   </head>
-  <body>
+  <body data-loaded="true" style="background-color: white;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
