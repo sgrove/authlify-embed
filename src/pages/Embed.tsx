@@ -12,6 +12,46 @@ import {
   ONEGRAPH_APP_ID,
   serviceImageUrl,
 } from '../lib'
+import * as copy from 'copy-to-clipboard'
+
+const copyIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" x="0" y="0" version="1" viewBox="0 0 60 60" height={24} width={24}>
+    {' '}
+    <rect
+      width="34.732"
+      height="36.513"
+      x="5.038"
+      y="4.577"
+      fill="#ccc"
+      fillRule="evenodd"
+      stroke="#4c4c4c"
+      strokeLinejoin="round"
+      strokeWidth="3.125"
+      rx="2.474"
+    ></rect>
+    <rect
+      width="34.732"
+      height="36.513"
+      x="20.178"
+      y="20.161"
+      fill="#b3b3b3"
+      fillRule="evenodd"
+      stroke="#4c4c4c"
+      strokeLinejoin="round"
+      strokeWidth="3.125"
+      rx="2.474"
+    ></rect>
+    <path
+      fill="#7f7f7f"
+      fillRule="evenodd"
+      stroke="#333"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3.125"
+      d="M10.971 22.475C19.445 41.064 33.797 36.69 33.934 36.69v-6.15l8.269 9.459-8.338 8.788v-6.219s-19.887 4.647-22.894-20.093z"
+    ></path>
+  </svg>
+)
 
 // @ts-ignore
 function useOnClickOutside(ref, handler) {
@@ -60,8 +100,8 @@ const Dropdown = (props: DropdownProps) => {
         {props.title} ({props.items.length})
         <svg
           height={12}
-          viewBox="0 0 16 16"
           width={12}
+          viewBox="0 0 16 16"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
           className={
@@ -420,7 +460,7 @@ function Embed() {
                 }),
               )
 
-              const newEnvVars = { ...filteredEnvVars, ...newBearerTokens, ONEGRAPH_ACCESS_TOKEN: newAccessToken }
+              const newEnvVars = { ...filteredEnvVars, ...newBearerTokens, ONEGRAPH_AUTHLIFY_TOKEN: newAccessToken }
 
               await executeNetlifySetEnvMutation(state.netlifyOneGraphAuth, state.selectedSite?.id, newEnvVars)
 
@@ -442,7 +482,7 @@ function Embed() {
             )
             const newAccessToken = state.userOneGraphAuth.accessToken()?.accessToken
 
-            const newEnvVars = { ...filteredEnvVars, ONEGRAPH_ACCESS_TOKEN: newAccessToken }
+            const newEnvVars = { ...filteredEnvVars, ONEGRAPH_AUTHLIFY_TOKEN: newAccessToken }
 
             if (!state.selectedSite) {
               return
@@ -486,7 +526,14 @@ function Embed() {
                   justifySelf: 'center',
                 }}
               >
-                {loggedIn && bearerToken ? sanitizeToken(bearerToken, 16) : ''}
+                {loggedIn && bearerToken ? (
+                  <>
+                    {sanitizeToken(bearerToken, 16)}
+                    <button>{copyIcon}</button>
+                  </>
+                ) : (
+                  ''
+                )}
               </div>
               <div style={{ textAlign: 'left' }}>
                 <button
