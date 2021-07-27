@@ -499,7 +499,7 @@ function Embed() {
                     loggedIn ? doLogout(service) : doLogin(service)
                   }}
                 >
-                  {loggedIn ? 'Clear ' : 'Set '} auth
+                  {loggedIn ? 'Remove auth' : 'Authenticate'}
                 </button>
               </div>
             </li>
