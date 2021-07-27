@@ -13,9 +13,10 @@ import {
   serviceImageUrl,
 } from '../lib'
 
+// @ts-ignore
 function useOnClickOutside(ref, handler) {
   useEffect(() => {
-    const listener = event => {
+    const listener = (event: any) => {
       // Do nothing if clicking ref's element or descendent elements
       if (!ref.current || ref.current.contains(event.target)) {
         return
@@ -44,6 +45,7 @@ const Dropdown = (props: DropdownProps) => {
   useOnClickOutside(ref, () => setOpen(false))
 
   return (
+    // @ts-ignore
     <div className="dropdown open" aria-expanded="true" aria-haspopup="listbox" aria-owns="downshift-3-menu" ref={ref}>
       <button
         role="button"
