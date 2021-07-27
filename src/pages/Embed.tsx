@@ -563,7 +563,7 @@ function Embed() {
         ) : null}
       </div>
       <div style={{ alignSelf: 'start', width: '100%', marginTop: '115px' }}>
-        {state.authlifyEnabled ? authTable : null}
+        {state.authlifyEnabled && state.availableSites.length > 0 ? authTable : null}
       </div>
     </>
   )
