@@ -237,11 +237,7 @@ type State = {
   selectedSite: Site | null
 }
 
-type Props = {
-  siteId: string
-}
-
-function Embed(props: Props) {
+function Embed() {
   const [state, setState] = React.useState<State>({
     envVars: [],
     authlifyEnabled: false,
