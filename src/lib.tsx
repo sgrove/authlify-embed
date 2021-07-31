@@ -1,3 +1,10 @@
+// @ts-ignore
+import OneGraphAuth from 'onegraph-auth'
+
+export const allowList = new Set(['github', 'spotify', 'salesforce'])
+
+export const oneGraphAuthlifyTokenEnvName = 'ONEGRAPH_AUTHLIFY_TOKEN'
+
 export const ONEGRAPH_APP_ID = '4d3de9a5-722f-4d27-9c96-2ac43c93c004'
 
 // This setup is only needed once per application
@@ -35,17 +42,17 @@ query SiteEnvVariables($id: String!) {
 }
 
 mutation NetlifySetEnvMutation($path: String! $envObject: JSON!) {
-    netlify {
-      makeRestCall {
-        patch(
-          path: $path
-          jsonBody: { build_settings: { env: $envObject } }
-        ) {
-          jsonBody
-        }
+  netlify {
+    makeRestCall {
+      patch(
+        path: $path
+        jsonBody: { build_settings: { env: $envObject } }
+      ) {
+        jsonBody
       }
     }
   }
+}
 
 query ListServicesQuery {
   oneGraph {
@@ -53,7 +60,39 @@ query ListServicesQuery {
       friendlyServiceName
       service
       slug
+      logoUrl
+      availableScopes {
+        category
+        scope
+        display
+        isDefault
+        isRequired
+        description
+        title
+      }
     }
+  }
+}
+
+fragment LoggedInServices on OneGraphServiceMetadata {
+  friendlyServiceName
+  service
+  isLoggedIn
+  bearerToken
+  serviceInfo {
+    logoUrl
+    availableScopes {
+      category
+      scope
+      display
+      isDefault
+      isRequired
+      description
+      title
+    }
+  }
+  grantedScopes {
+    scope
   }
 }
 
@@ -61,10 +100,7 @@ query FindLoggedInServicesQuery {
   me {
     serviceMetadata {
       loggedInServices {
-        friendlyServiceName
-        service
-        isLoggedIn
-        bearerToken
+        ...LoggedInServices
       }
     }
   }
@@ -75,9 +111,71 @@ query NetlifyListSites {
     sites {
       id
       name
+      buildSettings {
+        env {
+          property
+          value
+        }
+      }
     }
   }
-}`
+}
+
+mutation CreateNetlifyPersonalTokenMutation($token: String!) {
+  oneGraph {
+    createPersonalToken(
+      input: {
+        anchor: NETLIFY_USER
+        appId: "4d3de9a5-722f-4d27-9c96-2ac43c93c004"
+        accessToken: $token
+        name: "NetlifyToken"
+      }
+    ) {
+      accessToken {
+        token
+        name
+        anchor
+      }
+    }
+  }
+}
+
+mutation AddAuthsMutation($token: String!, $sToken: String!) {
+  oneGraph {
+    addAuthsToPersonalToken(
+      input: {
+        personalToken: $token
+        sacrificialToken: $sToken
+        appId: "4d3de9a5-722f-4d27-9c96-2ac43c93c004"
+      }
+    ) {
+      accessToken {
+        token
+        name
+        anchor
+      }
+    }
+  }
+}
+
+mutation SignOutServicesMutation {
+  signoutServices(data: { services: [SPOTIFY] }) {
+    me {
+      serviceMetadata {
+        loggedInServices {
+          ...LoggedInServices
+        }
+      }
+    }
+  }
+} 
+
+mutation DestroyTokenMutation($token: String!) {
+  oneGraph {
+    destroyToken(token: $token)
+  }
+}
+`
 
 // @ts-ignore
 export function fetchSiteEnvVariables(auth, id: string) {
@@ -85,8 +183,9 @@ export function fetchSiteEnvVariables(auth, id: string) {
 }
 
 // @ts-ignore
-export function executeNetlifySetEnvMutation(auth, siteId: string, envObject: any) {
+export function executeNetlifySetEnvMutation(auth, siteId: string, envVars: Array<[string, string]>) {
   const path = `/api/v1/sites/${siteId}`
+  const envObject = Object.fromEntries(envVars)
   return fetchOneGraph(auth, operationsDoc, 'NetlifySetEnvMutation', { path: path, envObject: envObject })
 }
 
@@ -105,7 +204,39 @@ export function fetchNetlifyListSites(auth) {
   return fetchOneGraph(auth, operationsDoc, 'NetlifyListSites', {})
 }
 
+// @ts-ignore
+export function executeCreateNetlifyPersonalToken(auth, token: string) {
+  return fetchOneGraph(auth, operationsDoc, 'CreateNetlifyPersonalTokenMutation', {
+    token: token,
+  })
+}
+
+// @ts-ignore
+export function executeAddAuths(auth, token: string, sToken: string) {
+  return fetchOneGraph(auth, operationsDoc, 'AddAuthsMutation', {
+    token: token,
+    sToken: sToken,
+  })
+}
+
+// @ts-ignore
+export function executeSignOutServices(auth, services: string[]) {
+  return fetchOneGraph(auth, operationsDoc, 'SignOutServicesMutation', {
+    services: services,
+  })
+}
+
+// @ts-ignore
+export function executeDestroyToken(auth, token: string) {
+  return fetchOneGraph(auth, operationsDoc, 'DestroyTokenMutation', {
+    token: token,
+  })
+}
+
 /** Front end helpers */
+
+// Only needed for during PoC, as we've started migrating this into OneGraph already
+// (see GitHub, SFDC, and Spotify)
 const ServiceLookup = {
   adroll: ['adroll.com', 'Adroll'],
   asana: ['asana.com', 'Asana'],
@@ -180,4 +311,16 @@ export const serviceImageUrl = (service: Keys, size = 50) => {
   }
 
   return `//logo.clearbit.com/${lookup[0]}?size=${size}`
+}
+
+export const newAuthWithToken = (token: string | null) => {
+  const auth = new OneGraphAuth({
+    appId: ONEGRAPH_APP_ID,
+  })
+
+  if (token) {
+    auth.setToken({ accessToken: token })
+  }
+
+  return auth
 }

@@ -1,153 +1,85 @@
 import React, { useEffect } from 'react'
 // @ts-ignore
-import OneGraphAuth from 'onegraph-auth'
-// @ts-ignore
-import { SubscriptionClient } from 'onegraph-subscription-client'
+import OneGraphAuth, { InMemoryStorage } from 'onegraph-auth'
 import {
+  executeCreateNetlifyPersonalToken,
+  executeDestroyToken,
   executeNetlifySetEnvMutation,
-  fetchLoggedInServices,
   fetchNetlifyListSites,
   fetchServices,
   fetchSiteEnvVariables,
+  newAuthWithToken,
+  oneGraphAuthlifyTokenEnvName,
   ONEGRAPH_APP_ID,
-  serviceImageUrl,
 } from '../lib'
+import { EnvVar, SiteAuth, Site, Service } from '../components/SiteAuth'
+import { Dropdown } from '../components/Base/Dropdown'
 
-// @ts-ignore
-function useOnClickOutside(ref, handler) {
-  useEffect(() => {
-    const listener = (event: any) => {
-      // Do nothing if clicking ref's element or descendent elements
-      if (!ref.current || ref.current.contains(event.target)) {
-        return
-      }
-      handler(event)
-    }
-    document.addEventListener('mousedown', listener)
-    document.addEventListener('touchstart', listener)
-    return () => {
-      document.removeEventListener('mousedown', listener)
-      document.removeEventListener('touchstart', listener)
-    }
-  }, [ref, handler])
-}
-
-type DropdownProps = {
-  title: string
-  items: Array<{ value: any; label: string }>
-  onChange: (value: any) => void
-  style: any
-}
-
-const Dropdown = (props: DropdownProps) => {
-  const ref = React.useRef()
-  const [open, setOpen] = React.useState(false)
-  useOnClickOutside(ref, () => setOpen(false))
-
-  return (
-    // @ts-ignore
-    <div className="dropdown open" aria-expanded="true" aria-haspopup="listbox" aria-owns="downshift-3-menu" ref={ref}>
-      <button
-        role="button"
-        aria-label="Options. Close menu"
-        aria-haspopup="true"
-        data-toggle="true"
-        name="Options"
-        className="btn btn-default btn-secondary btn-secondary--standard"
-        type="button"
-        onClick={() => setOpen(!open)}
-      >
-        {props.title} ({props.items.length})
-        <svg
-          height={12}
-          width={12}
-          viewBox="0 0 16 16"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-          className={
-            '!tw-fill-current tw-transition-transform tw-duration-100 tw-ease-cubic-bezier tw-align-middle tw-inline-block tw--mt-[2px] tw-ml-1 tw-transform ' +
-            (open ? 'tw-rotate-180' : '')
-          }
-        >
-          <path d="M4 4l3.4 3.4c.3.4.9.4 1.2 0L11.9 4 14 6.2l-5.4 5.6c-.3.3-.9.3-1.2 0L2 6.2z"></path>
-        </svg>
-      </button>
-      <ul className="dropdown-inner dropdown-menu" hidden={!open} style={props.style || {}}>
-        {props.items.map(({ value, label }, i) => (
-          <li key={i}>
-            <a
-              id="downshift-3-item-0"
-              role="option"
-              aria-selected="false"
-              className="menuitem"
-              onClick={() => {
-                setOpen(false)
-                props.onChange(value)
-              }}
-            >
-              {label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
+/**
+ * Steps:
+ * [X] 1. Log into Netlify ("Enable addon")
+ * [X] 2. Get list of sites
+ * [X] 3. Allow user to select a site
+ * [X] 4. After user selects a site, fetch its environment variables
+ * [X] 5. See if the ONEGRAPH_AUTHLIFY_TOKEN is set
+ * [X] 6. If not, prompt user to log into Netlify ("Enable for site")
+ * [X] 7. With the ONEGRAPH_AUTLIFY_TOKEN, fetch the list of logged-in services
+ * [X] 8. For any service logged into, create a new onegraph-auth for the flow
+ * [X] 9. Set scopes for onegraph-auth
+ * [X] 10. Sacrifice the token from #8 to the AUTHLIFY token
+ * [X] 11. Any service log out should use the AUTHLIFY onegraph-auth and
+ */
 
 const netlifyOneGraphAuth = new OneGraphAuth({
   appId: ONEGRAPH_APP_ID,
 })
 
-const userOneGraphAuth = new OneGraphAuth({
-  appId: ONEGRAPH_APP_ID,
-})
+const extractAuthlifyToken = (envVars: Array<EnvVar>): string | null => {
+  return envVars.find(({ property }: EnvVar) => property === oneGraphAuthlifyTokenEnvName)?.value || null
+}
+
+const enableSiteAuthlify = async (site: Site): Promise<null> => {
+  const auth = new OneGraphAuth({
+    appId: ONEGRAPH_APP_ID,
+    storage: new InMemoryStorage(),
+  })
+
+  await auth.login('netlify')
+
+  const isLoggedIn = await auth.isLoggedIn('netlify')
+  const authlifyToken = auth.accessToken()?.accessToken
+
+  if (isLoggedIn && authlifyToken) {
+    const result = await executeCreateNetlifyPersonalToken(auth, authlifyToken)
+    const eternalToken = result.data?.oneGraph?.createPersonalToken?.accessToken
+    if (eternalToken) {
+      const envVarsRequest = await fetchSiteEnvVariables(auth, site.id)
+
+      if (!!envVarsRequest.errors) {
+        console.error('Error getting site envVars', envVarsRequest.errors)
+        return null
+      }
+
+      const currentEnvVars: Array<[string, string]> =
+        envVarsRequest.data?.netlify?.site?.buildSettings?.env?.map(({ property, value }: EnvVar) => {
+          return [property, value]
+        }) || []
+
+      let newEnvVars = Object.fromEntries(currentEnvVars)
+
+      newEnvVars[oneGraphAuthlifyTokenEnvName] = eternalToken.token
+
+      await executeNetlifySetEnvMutation(auth, site.id, Object.entries(newEnvVars))
+
+      return null
+    }
+  }
+
+  return null
+}
 
 // @ts-ignore
 window.oneGraphAuth = netlifyOneGraphAuth
-
-const subscriptionClient = new SubscriptionClient(ONEGRAPH_APP_ID, {
-  oneGraphAuth: netlifyOneGraphAuth,
-  reconnect: true,
-  lazy: true,
-})
-
-type EnvVar = {
-  property: string
-  value: string
-}
-
-type EnvVarsResult =
-  | {
-      success: true
-      envVars: Array<EnvVar>
-    }
-  | {
-      success: false
-      kind: 'authError'
-      service: string
-    }
-  | { success: false; kind: 'fetchError' }
-
-// @ts-ignore
-async function fetchSiteEnvVars(auth, siteId: string): Promise<EnvVarsResult> {
-  try {
-    const { errors, data } = await fetchSiteEnvVariables(auth, siteId)
-
-    const missingNetlifyAuth = auth.findMissingAuthServices(errors).find((service: string) => service === 'netlify')
-
-    if (missingNetlifyAuth) {
-      return { kind: 'authError', service: 'netlify', success: false }
-    }
-
-    const envVars = data?.netlify?.site?.buildSettings?.env || []
-
-    return { success: true, envVars }
-  } catch (fetchError) {
-    // Handle fetch errors
-    console.error(fetchError)
-    return { kind: 'fetchError', success: false }
-  }
-}
 
 const authIcon = (
   <svg
@@ -169,127 +101,107 @@ const authIcon = (
   </svg>
 )
 
-const blocklist = new Set([
-  'gmail',
-  'google',
-  'google-calendar',
-  'google-compute',
-  'google-docs',
-  'google-translate',
-  'zeit',
-  'emailNode',
-  'me',
-  'oneGraphNode',
-  'immigrationGraph',
-  'descuri',
-  'youTubeSearch',
-  'youTubeVideo',
-])
-
-const serviceToEnvVar = (service: Service): string => {
-  const serviceName = service.slug.replace(/\W+|_|-/g, '_').toLocaleUpperCase()
-  return `ONEGRAPH_${serviceName}_TOKEN`
-}
-
-const hasAuthTokenSet = (envVars: Array<EnvVar>, service: Service): boolean => {
-  const envVar = serviceToEnvVar(service)
-  return envVars.some(({ property }) => property === envVar)
-}
-
-// This function replaces all but the last four digits of a string with zeroes
-const sanitizeToken = (str: string, length = 16): string => {
-  const len = str.length
-  const displayed = len > 4 ? str.substr(len - 4, len) : str
-
-  const padLength = length - displayed.length
-  return displayed.padStart(padLength, '*')
-}
-
-type Service = {
-  friendlyServiceName: string
-  service: string
-  slug: string
-}
-
-type LoggedInService = {
-  friendlyServiceName: string
-  service: string
-  slug: string
-  isLoggedIn: boolean
-  bearerToken: string | null
-}
-
-type Site = {
-  id: string
-  name: string
-}
-
 type State = {
-  envVars: Array<EnvVar>
-  authlifyEnabled: boolean
+  isLoggedIntoNetlify: boolean
   netlifyOneGraphAuth: any
-  userOneGraphAuth: any
-  authlifyToken: string | null
   availableServices: Array<Service>
-  loggedInServices: Array<LoggedInService>
   search: string | null
   availableSites: Array<Site>
   selectedSite: Site | null
+  siteOneGraphAuth: any
 }
 
 function Embed() {
   const [state, setState] = React.useState<State>({
-    envVars: [],
-    authlifyEnabled: false,
+    isLoggedIntoNetlify: false,
     netlifyOneGraphAuth: netlifyOneGraphAuth,
-    userOneGraphAuth: userOneGraphAuth,
     availableServices: [],
-    loggedInServices: [],
-    authlifyToken: null,
     search: null,
     selectedSite: null,
     availableSites: [],
+    siteOneGraphAuth: newAuthWithToken(null),
   })
 
   useEffect(() => {
-    if (state.selectedSite) {
-      fetchSiteEnvVars(state.netlifyOneGraphAuth, state.selectedSite?.id).then(result => {
-        if (result.success === true) {
-          const authlifyToken =
-            result.envVars.find(({ property }) => property === 'ONEGRAPH_AUTHLIFY_TOKEN')?.value || null
-
-          setState(oldState => ({
-            ...oldState,
-            authlifyEnabled: true,
-            envVars: result.envVars || [],
-            authlifyToken: authlifyToken,
-          }))
-        }
-      })
-    }
-
-    fetchNetlifyListSites(state.netlifyOneGraphAuth).then(result => {
-      console.log('Available sites: ', result)
-      setState(oldState => ({
-        ...oldState,
-        availableSites: result?.data?.netlify?.sites || [],
-      }))
-    })
-
     fetchServices(state.netlifyOneGraphAuth).then(result => {
       const services = result.data?.oneGraph?.services || []
       setState(oldState => ({ ...oldState, availableServices: services }))
     })
-  }, [state.selectedSite?.id])
+  }, [])
+
+  const refreshSiteEnvVariables = async (selectedSite: Site): Promise<boolean> => {
+    return fetchSiteEnvVariables(state.netlifyOneGraphAuth, selectedSite.id).then(result => {
+      if (!result.errors) {
+        const envVars = result.data?.netlify?.site?.buildSettings?.env || []
+
+        const authlifyToken =
+          envVars.find(({ property }: EnvVar) => {
+            return property === oneGraphAuthlifyTokenEnvName
+          })?.value || null
+
+        const siteOneGraphAuth = new OneGraphAuth({
+          appId: ONEGRAPH_APP_ID,
+        })
+
+        siteOneGraphAuth.setToken({ accessToken: authlifyToken })
+
+        const newSelectedSite: Site = {
+          ...selectedSite,
+          authlifyEnabled: true,
+          oneGraphAuth: siteOneGraphAuth,
+          envVars: envVars,
+        }
+
+        setState(oldState => ({
+          ...oldState,
+          isLoggedIntoNetlify: true,
+          selectedSite: newSelectedSite,
+          siteOneGraphAuth,
+        }))
+
+        if (authlifyToken) {
+          return true
+        } else {
+          console.warn('Fetched site env vars successfully, but no authlify token found')
+
+          return false
+        }
+      }
+
+      console.warn('Unable to fetch site env vars successfully', result)
+      return false
+    })
+  }
+
+  const repeatedlyRefreshSiteEnvVariables = async (
+    attempts: number,
+    delayMs = 500,
+    selectedSite: Site,
+  ): Promise<boolean> => {
+    if (attempts > 0) {
+      const success = await refreshSiteEnvVariables(selectedSite)
+      if (success) {
+        return true
+      }
+      const asyncResult: Promise<boolean> = new Promise(resolve =>
+        setTimeout(
+          async () => resolve(await repeatedlyRefreshSiteEnvVariables(attempts - 1, delayMs, selectedSite)),
+          delayMs,
+        ),
+      )
+
+      return await asyncResult
+    }
+    return false
+  }
 
   useEffect(() => {
-    state.userOneGraphAuth.setToken({ accessToken: state.authlifyToken })
+    if (!state.selectedSite?.id) {
+      return
+    }
 
-    fetchLoggedInServices(state.userOneGraphAuth).then(result => {
-      const services = result.data?.me?.serviceMetadata?.loggedInServices || []
-      setState(oldState => ({ ...oldState, loggedInServices: services }))
-    })
-  }, [state.selectedSite?.id, state.authlifyToken])
+    refreshSiteEnvVariables(state.selectedSite)
+  }, [state.selectedSite?.id])
 
   const siteSelectorButton = (
     <Dropdown
@@ -300,10 +212,14 @@ function Embed() {
         label: site.name,
       }))}
       onChange={site => {
-        console.log('Selected site: ', site)
+        const token = extractAuthlifyToken(site.envVars)
+
+        const newSiteAuth = newAuthWithToken(token)
+
         setState(oldState => ({
           ...oldState,
           selectedSite: site,
+          siteOneGraphAuth: newSiteAuth,
         }))
       }}
     />
@@ -323,190 +239,106 @@ function Embed() {
             return
           }
 
-          const availableSites = await fetchNetlifyListSites(netlifyOneGraphAuth)
+          const rawAvailableSites = await fetchNetlifyListSites(netlifyOneGraphAuth)
 
-          const site = availableSites?.data?.netlify?.sites?.[0]
+          const availableSites = rawAvailableSites.data?.netlify?.sites.map((site: any): Site => {
+            const authlifyToken =
+              site.buildSettings.env.find(
+                ({ property }: { property: string }) => property === oneGraphAuthlifyTokenEnvName,
+              )?.value || null
+
+            return {
+              id: site.id,
+              name: site.name,
+              authlifyEnabled: !!authlifyToken,
+              envVars: site.buildSettings.env,
+              oneGraphAuth: new OneGraphAuth({ appId: ONEGRAPH_APP_ID }),
+              loggedInServices: [],
+            }
+          })
+
+          const site = availableSites?.[0]
 
           if (!site) {
             return
           }
 
-          const result = await fetchSiteEnvVars(state.netlifyOneGraphAuth, site.id)
-
-          if (result.success === false) {
-            setState(oldState => ({ ...oldState, selectedSite: site, authlifyEnabled: false }))
-          } else if (result.success === true) {
-            setState(oldState => ({
-              ...oldState,
-              selectedSite: site,
-              authlifyEnabled: true,
-              envVars: result.envVars || [],
-            }))
-          }
+          setState(oldState => ({
+            ...oldState,
+            selectedSite: site,
+            isLoggedIntoNetlify: true,
+            availableSites: availableSites,
+          }))
         } catch (fetchError) {
           // Handle fetch errors
           console.error(fetchError)
         }
       }}
     >
-      Enable
+      Turn on
     </button>
   )
 
-  const disableButton = (
+  const siteHasEnabledAuthlify =
+    state.isLoggedIntoNetlify && !!state.selectedSite?.id && !!state.siteOneGraphAuth?.accessToken()?.accessToken
+
+  const enableAuthlifyForSiteButton = state.selectedSite ? (
     <button
-      className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
+      className="btn btn-default btn-secondary btn-secondary--standard"
       type="button"
       onClick={async () => {
-        await netlifyOneGraphAuth.logout('netlify')
-        setState(oldState => ({ ...oldState, authlifyEnabled: false, envVars: [] }))
+        if (state.selectedSite) {
+          await enableSiteAuthlify(state.selectedSite)
+          let attempts = 10
+          // Handle the async nature of setting env vars and then seeing them show up
+          // in a subsequent query
+          const success = await repeatedlyRefreshSiteEnvVariables(attempts, 500, state.selectedSite)
+
+          if (success) {
+            console.info('Success enabling authlify for site ', state.selectedSite.name)
+          } else {
+            console.warn('Unable to enable authlify for site ', state.selectedSite.name)
+          }
+        }
       }}
     >
-      Disable
+      Turn on for {state.selectedSite.name}
     </button>
-  )
+  ) : null
 
-  const authTable = (
-    <ul className="table-body">
-      {state.availableServices
-        .filter(service => {
-          if (state.search === null) {
-            return true
-          }
-          return !!service.friendlyServiceName.toLocaleLowerCase().match(state.search.toLocaleLowerCase())
-        })
-        .sort((a, b) => {
-          return a.friendlyServiceName.localeCompare(b.friendlyServiceName)
-        })
-        .map(service => {
-          if (blocklist.has(service.slug)) {
-            return
-          }
+  const onDisableAuthlifyForSite = async (siteId: string): Promise<null> => {
+    const envVarsRequest = await fetchSiteEnvVariables(netlifyOneGraphAuth, siteId)
 
-          const loggedIn = hasAuthTokenSet(state.envVars, service)
-          const doLogin = async (service: any) => {
-            await state.userOneGraphAuth.login(service.slug)
+    if (!!envVarsRequest.errors) {
+      console.error('Error getting site envVars', envVarsRequest.errors)
+      return null
+    }
 
-            const loggedIn = await state.userOneGraphAuth.isLoggedIn(service.slug)
+    const currentEnvVars: Array<[string, string]> =
+      envVarsRequest.data?.netlify?.site?.buildSettings?.env?.map(({ property, value }: EnvVar) => {
+        return [property, value]
+      }) || []
 
-            if (loggedIn) {
-              const loggedInServices: Array<LoggedInService> = await fetchLoggedInServices(state.userOneGraphAuth).then(
-                result => {
-                  const services = result.data?.me?.serviceMetadata?.loggedInServices || []
-                  return services
-                },
-              )
+    const authlifyToken = currentEnvVars.find(([property]) => property === oneGraphAuthlifyTokenEnvName)?.[1]
 
-              if (!state.selectedSite) {
-                return
-              }
+    let newEnvVars = currentEnvVars.filter(([property]) => property !== oneGraphAuthlifyTokenEnvName)
 
-              const existingEnvVars = await fetchSiteEnvVars(state.netlifyOneGraphAuth, state.selectedSite?.id)
+    await executeNetlifySetEnvMutation(netlifyOneGraphAuth, siteId, newEnvVars)
 
-              if (!existingEnvVars.success) {
-                return
-              }
+    if (!authlifyToken) {
+      return null
+    }
 
-              const filteredEnvVars = existingEnvVars.envVars.filter(({ property }) => {
-                return !property.startsWith('ONEGRAPH_')
-              })
+    await executeDestroyToken(netlifyOneGraphAuth, authlifyToken)
 
-              const newAccessToken = state.userOneGraphAuth.accessToken()?.accessToken
+    state.siteOneGraphAuth.setToken({})
 
-              const newBearerTokens = Object.fromEntries(
-                loggedInServices.map(service => {
-                  const propertyName = serviceToEnvVar({ ...service, slug: service.service })
-                  return [propertyName, service.bearerToken]
-                }),
-              )
+    const newAuth = newAuthWithToken(null)
 
-              const newEnvVars = { ...filteredEnvVars, ...newBearerTokens, ONEGRAPH_AUTHLIFY_TOKEN: newAccessToken }
+    setState(oldState => ({ ...oldState, siteOneGraphAuth: newAuth }))
 
-              await executeNetlifySetEnvMutation(state.netlifyOneGraphAuth, state.selectedSite?.id, newEnvVars)
-
-              const envVars = await fetchSiteEnvVars(state.netlifyOneGraphAuth, state.selectedSite?.id)
-
-              if (envVars.success === true) {
-                setState(oldState => ({ ...oldState, envVars: envVars.envVars }))
-              }
-            }
-          }
-
-          const doLogout = async (service: any) => {
-            await state.userOneGraphAuth.logout(service.slug)
-
-            const filteredEnvVars = Object.fromEntries(
-              state.envVars
-                .filter(({ property }) => property !== serviceToEnvVar(service))
-                .map(({ property, value }) => [property, value]),
-            )
-            const newAccessToken = state.userOneGraphAuth.accessToken()?.accessToken
-
-            const newEnvVars = { ...filteredEnvVars, ONEGRAPH_AUTHLIFY_TOKEN: newAccessToken }
-
-            if (!state.selectedSite) {
-              return
-            }
-
-            await executeNetlifySetEnvMutation(state.netlifyOneGraphAuth, state.selectedSite?.id, newEnvVars)
-
-            const envVars = await fetchSiteEnvVars(state.netlifyOneGraphAuth, state.selectedSite?.id)
-
-            if (envVars.success === true) {
-              setState(oldState => ({ ...oldState, envVars: envVars.envVars }))
-            }
-          }
-
-          const bearerToken = state.envVars.find(({ property }) => property === serviceToEnvVar(service))?.value
-
-          return (
-            <li key={service.slug} style={{ display: 'flex' }}>
-              <div style={{ textAlign: 'left' }}>
-                <img
-                  alt={`${service.service} Logomark`}
-                  // @ts-ignore: Safe
-                  src={serviceImageUrl(service.slug)}
-                  style={{
-                    width: '50px',
-                    borderRadius: '6px',
-                    marginRight: '6px',
-                    display: 'inline-block',
-                  }}
-                />
-                {service.friendlyServiceName} API
-              </div>
-
-              <div
-                style={{
-                  fontFamily: 'monospace',
-                  flexGrow: 1,
-                  paddingRight: '6px',
-                  textAlign: 'right',
-                  justifyContent: 'center',
-                  justifySelf: 'center',
-                }}
-              >
-                {loggedIn && bearerToken ? <>{sanitizeToken(bearerToken, 16)}</> : ''}
-              </div>
-              <div style={{ textAlign: 'left' }}>
-                <button
-                  className={
-                    'btn btn-default btn-primary btn-primary--standard ' + (loggedIn ? 'btn-primary--danger ' : ' ')
-                  }
-                  type="button"
-                  style={{ alignSelf: 'end', marginRight: '6px' }}
-                  onClick={() => {
-                    loggedIn ? doLogout(service) : doLogin(service)
-                  }}
-                >
-                  {loggedIn ? 'Remove auth' : 'Authenticate'}
-                </button>
-              </div>
-            </li>
-          )
-        })}
-    </ul>
-  )
+    return null
+  }
 
   return (
     <>
@@ -531,7 +363,7 @@ function Embed() {
             </p>
           </div>
         </div>
-        <div className="actions">{state.authlifyEnabled ? siteSelectorButton : enableButton}</div>
+        <div className="actions">{state.isLoggedIntoNetlify ? <>{siteSelectorButton}</> : enableButton}</div>
       </div>
       <div
         style={{
@@ -543,7 +375,7 @@ function Embed() {
           zIndex: 99,
         }}
       >
-        {state.authlifyEnabled ? (
+        {state.isLoggedIntoNetlify && state.selectedSite ? (
           <input
             style={{
               width: '100%',
@@ -563,7 +395,18 @@ function Embed() {
         ) : null}
       </div>
       <div style={{ alignSelf: 'start', width: '100%', marginTop: '115px' }}>
-        {state.authlifyEnabled && state.availableSites.length > 0 ? authTable : null}
+        {siteHasEnabledAuthlify && state.selectedSite ? (
+          <>
+            <SiteAuth
+              availableServices={state.availableServices}
+              selectedSiteId={state.selectedSite.id}
+              siteEternalOneGraphToken={state.siteOneGraphAuth.accessToken().accessToken}
+              onDisableAuthlifyForSite={onDisableAuthlifyForSite}
+            />
+          </>
+        ) : (
+          enableAuthlifyForSiteButton
+        )}
       </div>
     </>
   )
