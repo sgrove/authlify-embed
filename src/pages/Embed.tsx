@@ -343,9 +343,8 @@ function Embed() {
   return (
     <>
       <div
-        className="inline"
+        className="inline iframe-hack-position"
         style={{
-          position: 'fixed',
           background: 'rgb(250,251,251)',
           top: '0px',
           zIndex: 99999,
@@ -366,11 +365,11 @@ function Embed() {
         <div className="actions">{state.isLoggedIntoNetlify ? <>{siteSelectorButton}</> : enableButton}</div>
       </div>
       <div
+        className="iframe-hack-position"
         style={{
           alignSelf: 'start',
           width: '100%',
           top: '80px',
-          position: 'fixed',
           background: 'rgb(250,251,251)',
           zIndex: 99,
         }}

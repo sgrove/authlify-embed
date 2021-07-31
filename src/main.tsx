@@ -10,7 +10,7 @@ function inIframe() {
 ReactDOM.render(
   <React.StrictMode>
     {inIframe() ? (
-      <ul className="table-body">
+      <ul className="table-body iframe-hack">
         <li className="lab__row" style={{ flexDirection: 'column' }}>
           <App />
         </li>
