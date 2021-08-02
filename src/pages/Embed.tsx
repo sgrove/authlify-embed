@@ -416,7 +416,7 @@ function Embed() {
           />
         ) : null}
       </div>
-      <div style={{ alignSelf: 'start', width: '100%', marginTop: '115px' }}>
+      <div className="site-container" style={{ alignSelf: 'start', width: '100%' }}>
         {state.selectedSite && state.selectedSite.id === state.deployPending ? (
           <p>
             <strong>

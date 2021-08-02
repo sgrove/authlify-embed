@@ -16,3 +16,7 @@ body {
 .authlify input[type^='checkbox'] {
   all: revert;
 }
+
+.iframe-hack .site-container {
+  margin-top: 115px;
+}
