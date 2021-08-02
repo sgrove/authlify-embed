@@ -5,6 +5,7 @@ import {
   executeCreateNetlifyPersonalToken,
   executeDestroyToken,
   executeNetlifySetEnvMutation,
+  executeNetlifyTriggerFreshBuild,
   fetchNetlifyListSites,
   fetchServices,
   fetchSiteEnvVariables,
@@ -312,6 +313,8 @@ function Embed() {
               ...oldState,
               deployPending: oldState.selectedSite?.id || null,
             }))
+
+            await executeNetlifyTriggerFreshBuild(netlifyOneGraphAuth, state.selectedSite.id)
 
             setTimeout(() => {
               setState(oldState => ({
