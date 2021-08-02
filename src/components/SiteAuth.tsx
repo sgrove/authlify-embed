@@ -297,7 +297,7 @@ function AuthTable(props: AuthTableProps) {
 
             return (
               <li key={service.slug}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px' }}>
                   <div style={{ textAlign: 'left' }}>
                     <img
                       alt={`${service.service} Logomark`}
@@ -311,27 +311,29 @@ function AuthTable(props: AuthTableProps) {
                       }}
                     />
                     {service.friendlyServiceName} API
-                  </div>
-                  {loggedInService?.bearerToken ? <>Token: {sanitizeToken(loggedInService.bearerToken)}</> : null}
-
-                  <div style={{ textAlign: 'left', marginBottom: '6px' }}>
-                    <button
-                      className={
-                        'btn btn-default btn-primary btn-primary--standard ' +
-                        (loggedIn ? (scopeSelectionChanged ? '' : 'btn-primary--danger ') : ' ')
-                      }
-                      type="button"
-                      style={{ alignSelf: 'end', marginRight: '6px' }}
-                      onClick={() => {
-                        loggedIn
+                    <div style={{ textAlign: 'left', marginTop: '12px' }}>
+                      <button
+                        className={
+                          'btn btn-default btn-primary btn-primary--standard ' +
+                          (loggedIn ? (scopeSelectionChanged ? '' : 'btn-primary--danger ') : ' ')
+                        }
+                        type="button"
+                        style={{ alignSelf: 'end', marginRight: '6px' }}
+                        onClick={() => {
+                          loggedIn
+                            ? scopeSelectionChanged
+                              ? props.onLogin(service, currentDesiredScopes)
+                              : props.onLogout(service)
+                            : props.onLogin(service, currentDesiredScopes)
+                        }}
+                      >
+                        {loggedIn
                           ? scopeSelectionChanged
-                            ? props.onLogin(service, currentDesiredScopes)
-                            : props.onLogout(service)
-                          : props.onLogin(service, currentDesiredScopes)
-                      }}
-                    >
-                      {loggedIn ? (scopeSelectionChanged ? 'Update scopes' : 'Remove auth') : 'Authenticate'}
-                    </button>
+                            ? `Update ${service.friendlyServiceName} scopes`
+                            : `Remove ${service.friendlyServiceName}`
+                          : `Add ${service.friendlyServiceName}`}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
