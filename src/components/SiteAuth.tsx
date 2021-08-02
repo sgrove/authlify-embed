@@ -1,10 +1,14 @@
 import React, { useEffect } from 'react'
-import { allowList, executeAddAuths, fetchLoggedInServices, newAuthWithToken, serviceImageUrl } from '../lib'
+import { allowList, executeAddAuths, fetchLoggedInServices, newInMemoryAuthWithToken, serviceImageUrl } from '../lib'
 
 function checkSetEquality(setA: Set<any>, setB: Set<any>) {
   if (setA.size !== setB.size) return false
   for (var a of setA) if (!setB.has(a)) return false
   return true
+}
+
+function setDifference(setA: Set<any>, setB: Set<any>) {
+  return new Set([...setA].filter(x => !setB.has(x)))
 }
 
 // This function replaces all but the last four digits of a string with zeroes
@@ -70,6 +74,7 @@ type State = {
 type Props = {
   availableServices: Array<Service>
   selectedSiteId: string
+  selectedSiteName: string
   siteEternalOneGraphToken: string
   onDisableAuthlifyForSite: (siteId: string) => void
 }
@@ -79,7 +84,7 @@ export function SiteAuth(props: Props) {
     envVars: [],
     isLoggedIntoNetlify: false,
     search: null,
-    oneGraphAuth: newAuthWithToken(props.siteEternalOneGraphToken),
+    oneGraphAuth: newInMemoryAuthWithToken(props.siteEternalOneGraphToken),
     loggedInServices: [],
   })
 
@@ -90,7 +95,7 @@ export function SiteAuth(props: Props) {
   }
 
   useEffect(() => {
-    const newAuth = newAuthWithToken(props.siteEternalOneGraphToken)
+    const newAuth = newInMemoryAuthWithToken(props.siteEternalOneGraphToken)
 
     refreshLoggedInServices(newAuth)
   }, [props.siteEternalOneGraphToken])
@@ -104,7 +109,7 @@ export function SiteAuth(props: Props) {
           props.onDisableAuthlifyForSite(props.selectedSiteId)
         }}
       >
-        Disable Authlify for site
+        Disable Authlify for {props.selectedSiteName}
       </button>
 
       <AuthTable
@@ -114,7 +119,7 @@ export function SiteAuth(props: Props) {
         allowList={allowList}
         loggedInServices={state.loggedInServices}
         onLogin={async (service: Service, scopes: Array<string> | undefined) => {
-          const temporaryAuth = newAuthWithToken(props.siteEternalOneGraphToken)
+          const temporaryAuth = newInMemoryAuthWithToken(props.siteEternalOneGraphToken)
           await temporaryAuth.login(service.slug, scopes)
 
           const isLoggedIn = await temporaryAuth.isLoggedIn(service.slug)
@@ -234,30 +239,6 @@ function AuthTable(props: AuthTableProps) {
 
   return (
     <>
-      {/* <pre>
-        {JSON.stringify(
-          props.loggedInServices,
-          (key, value) => {
-            if (typeof value === 'object' && value instanceof Set) {
-              return [...value]
-            }
-            return value
-          },
-          2,
-        )}
-      </pre>
-      <pre>
-        {JSON.stringify(
-          state,
-          (key, value) => {
-            if (typeof value === 'object' && value instanceof Set) {
-              return [...value]
-            }
-            return value
-          },
-          2,
-        )}
-      </pre> */}
       <ul className="table-body">
         {props.availableServices
           .filter(service => {
@@ -290,7 +271,7 @@ function AuthTable(props: AuthTableProps) {
                 return a.scope.localeCompare(b.scope)
               })
               .reduce((acc: { [key: string]: Array<ScopeInfo> }, next) => {
-                const category = next.category || ' '
+                const category = next.category || 'General'
                 const existing = acc[category]
                 if (existing) {
                   existing.push(next)
@@ -315,22 +296,43 @@ function AuthTable(props: AuthTableProps) {
                 : [...state.newServiceScopes[service.service]]
 
             return (
-              <li key={service.slug} style={{ display: 'flex' }}>
-                <div style={{ textAlign: 'left' }}>
-                  <img
-                    alt={`${service.service} Logomark`}
-                    // @ts-ignore: Safe
-                    src={service.logoUrl || serviceImageUrl(service.slug)}
-                    style={{
-                      width: '50px',
-                      borderRadius: '6px',
-                      marginRight: '6px',
-                      display: 'inline-block',
-                    }}
-                  />
-                  {service.friendlyServiceName} API
-                  <br />
-                  {loggedInService?.bearerToken ? sanitizeToken(loggedInService.bearerToken) : null}
+              <li key={service.slug}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <img
+                      alt={`${service.service} Logomark`}
+                      // @ts-ignore: Safe
+                      src={service.logoUrl || serviceImageUrl(service.slug)}
+                      style={{
+                        width: '50px',
+                        borderRadius: '6px',
+                        marginRight: '6px',
+                        display: 'inline-block',
+                      }}
+                    />
+                    {service.friendlyServiceName} API
+                  </div>
+                  {loggedInService?.bearerToken ? <>Token: {sanitizeToken(loggedInService.bearerToken)}</> : null}
+
+                  <div style={{ textAlign: 'left', marginBottom: '6px' }}>
+                    <button
+                      className={
+                        'btn btn-default btn-primary btn-primary--standard ' +
+                        (loggedIn ? (scopeSelectionChanged ? '' : 'btn-primary--danger ') : ' ')
+                      }
+                      type="button"
+                      style={{ alignSelf: 'end', marginRight: '6px' }}
+                      onClick={() => {
+                        loggedIn
+                          ? scopeSelectionChanged
+                            ? props.onLogin(service, currentDesiredScopes)
+                            : props.onLogout(service)
+                          : props.onLogin(service, currentDesiredScopes)
+                      }}
+                    >
+                      {loggedIn ? (scopeSelectionChanged ? 'Update scopes' : 'Remove auth') : 'Authenticate'}
+                    </button>
+                  </div>
                 </div>
 
                 <div
@@ -338,60 +340,57 @@ function AuthTable(props: AuthTableProps) {
                     fontFamily: 'monospace',
                     flexGrow: 1,
                     paddingRight: '6px',
-                    textAlign: 'left',
-                    justifyContent: 'space-around',
-                    justifySelf: 'start',
-                    display: 'grid',
-                    gridTemplateRows: 'repeat(20, 1fr)',
-                    gridAutoFlow: 'column',
+                    paddingLeft: '12px',
                   }}
                 >
                   {availableScopes?.map(([category, scopes]) => {
                     return (
-                      <>
-                        <div>
-                          <h3>{category}</h3>
+                      <div style={{ padding: '6px' }}>
+                        <h3 style={{ fontWeight: 'bold' }}>{category}</h3>
+                        <div style={{ padding: '6px' }}>
+                          {scopes.map(scope => {
+                            return (
+                              <label
+                                key={scope.display}
+                                title={scope.description}
+                                style={{ display: 'block', cursor: 'pointer' }}
+                              >
+                                <p style={{ display: 'inline-block', minWidth: '200px' }}>
+                                  <input
+                                    type="checkbox"
+                                    key={scope.scope}
+                                    value={scope.scope}
+                                    style={{
+                                      all: 'revert',
+                                    }}
+                                    onChange={event =>
+                                      event.target.checked
+                                        ? addScope(service, scope.scope)
+                                        : removeScope(service, scope.scope)
+                                    }
+                                    checked={!!state.newServiceScopes[service.service]?.has(scope.scope)}
+                                  />
+                                  {scope.display}
+                                </p>
+
+                                <p
+                                  style={{
+                                    display: 'block',
+                                    paddingLeft: '6px',
+                                    borderLeft: '2px solid #ccc',
+                                    margin: '6px',
+                                    whiteSpace: 'pre-wrap',
+                                  }}
+                                >
+                                  {scope.description}
+                                </p>
+                              </label>
+                            )
+                          })}
                         </div>
-                        {scopes.map(scope => {
-                          return (
-                            <label key={scope.display} title={scope.description}>
-                              <input
-                                type="checkbox"
-                                key={scope.scope}
-                                value={scope.scope}
-                                style={{ all: 'revert' }}
-                                onChange={event =>
-                                  event.target.checked
-                                    ? addScope(service, scope.scope)
-                                    : removeScope(service, scope.scope)
-                                }
-                                checked={!!state.newServiceScopes[service.service]?.has(scope.scope)}
-                              />
-                              {scope.display}
-                            </label>
-                          )
-                        })}
-                      </>
+                      </div>
                     )
                   })}
-                </div>
-                <div style={{ textAlign: 'left' }}>
-                  <button
-                    className={
-                      'btn btn-default btn-primary btn-primary--standard ' + (loggedIn ? 'btn-primary--danger ' : ' ')
-                    }
-                    type="button"
-                    style={{ alignSelf: 'end', marginRight: '6px' }}
-                    onClick={() => {
-                      loggedIn
-                        ? scopeSelectionChanged
-                          ? props.onLogin(service, currentDesiredScopes)
-                          : props.onLogout(service)
-                        : props.onLogin(service, currentDesiredScopes)
-                    }}
-                  >
-                    {loggedIn ? (scopeSelectionChanged ? 'Update scopes' : 'Remove auth') : 'Authenticate'}
-                  </button>
                 </div>
               </li>
             )

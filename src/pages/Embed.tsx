@@ -8,7 +8,7 @@ import {
   fetchNetlifyListSites,
   fetchServices,
   fetchSiteEnvVariables,
-  newAuthWithToken,
+  newInMemoryAuthWithToken,
   oneGraphAuthlifyTokenEnvName,
   ONEGRAPH_APP_ID,
 } from '../lib'
@@ -109,6 +109,7 @@ type State = {
   availableSites: Array<Site>
   selectedSite: Site | null
   siteOneGraphAuth: any
+  deployPending: string | null
 }
 
 function Embed() {
@@ -119,15 +120,65 @@ function Embed() {
     search: null,
     selectedSite: null,
     availableSites: [],
-    siteOneGraphAuth: newAuthWithToken(null),
+    siteOneGraphAuth: newInMemoryAuthWithToken(null),
+    deployPending: null,
   })
 
   useEffect(() => {
-    fetchServices(state.netlifyOneGraphAuth).then(result => {
+    fetchServices(state.netlifyOneGraphAuth).then(async result => {
       const services = result.data?.oneGraph?.services || []
       setState(oldState => ({ ...oldState, availableServices: services }))
+
+      const isLoggedIn = await netlifyOneGraphAuth.isLoggedIn('netlify')
+      if (isLoggedIn) {
+        setState(oldState => ({ ...oldState, isLoggedIntoNetlify: true }))
+        refreshNetlifyStatus()
+      }
     })
   }, [])
+
+  async function refreshNetlifyStatus() {
+    try {
+      const loggedIn = await netlifyOneGraphAuth.isLoggedIn('netlify')
+
+      if (!loggedIn) {
+        return
+      }
+
+      const rawAvailableSites = await fetchNetlifyListSites(netlifyOneGraphAuth)
+
+      const availableSites = rawAvailableSites.data?.netlify?.sites.map((site: any): Site => {
+        const authlifyToken =
+          site.buildSettings.env.find(({ property }: { property: string }) => property === oneGraphAuthlifyTokenEnvName)
+            ?.value || null
+
+        return {
+          id: site.id,
+          name: site.name,
+          authlifyEnabled: !!authlifyToken,
+          envVars: site.buildSettings.env,
+          oneGraphAuth: new OneGraphAuth({ appId: ONEGRAPH_APP_ID, storage: new InMemoryStorage() }),
+          loggedInServices: [],
+        }
+      })
+
+      const site = availableSites?.[0]
+
+      if (!site) {
+        return
+      }
+
+      setState(oldState => ({
+        ...oldState,
+        selectedSite: site,
+        isLoggedIntoNetlify: true,
+        availableSites: availableSites,
+      }))
+    } catch (fetchError) {
+      // Handle fetch errors
+      console.error(fetchError)
+    }
+  }
 
   const refreshSiteEnvVariables = async (selectedSite: Site): Promise<boolean> => {
     return fetchSiteEnvVariables(state.netlifyOneGraphAuth, selectedSite.id).then(result => {
@@ -141,9 +192,10 @@ function Embed() {
 
         const siteOneGraphAuth = new OneGraphAuth({
           appId: ONEGRAPH_APP_ID,
+          storage: new InMemoryStorage(),
         })
 
-        siteOneGraphAuth.setToken({ accessToken: authlifyToken })
+        siteOneGraphAuth.setToken({ accessToken: authlifyToken, wtf: true })
 
         const newSelectedSite: Site = {
           ...selectedSite,
@@ -214,7 +266,7 @@ function Embed() {
       onChange={site => {
         const token = extractAuthlifyToken(site.envVars)
 
-        const newSiteAuth = newAuthWithToken(token)
+        const newSiteAuth = newInMemoryAuthWithToken(token)
 
         setState(oldState => ({
           ...oldState,
@@ -230,49 +282,9 @@ function Embed() {
       className="btn btn-default btn-secondary btn-secondary--standard"
       type="button"
       onClick={async () => {
-        try {
-          await netlifyOneGraphAuth.login('netlify')
+        await netlifyOneGraphAuth.login('netlify')
 
-          const loggedIn = await netlifyOneGraphAuth.isLoggedIn('netlify')
-
-          if (!loggedIn) {
-            return
-          }
-
-          const rawAvailableSites = await fetchNetlifyListSites(netlifyOneGraphAuth)
-
-          const availableSites = rawAvailableSites.data?.netlify?.sites.map((site: any): Site => {
-            const authlifyToken =
-              site.buildSettings.env.find(
-                ({ property }: { property: string }) => property === oneGraphAuthlifyTokenEnvName,
-              )?.value || null
-
-            return {
-              id: site.id,
-              name: site.name,
-              authlifyEnabled: !!authlifyToken,
-              envVars: site.buildSettings.env,
-              oneGraphAuth: new OneGraphAuth({ appId: ONEGRAPH_APP_ID }),
-              loggedInServices: [],
-            }
-          })
-
-          const site = availableSites?.[0]
-
-          if (!site) {
-            return
-          }
-
-          setState(oldState => ({
-            ...oldState,
-            selectedSite: site,
-            isLoggedIntoNetlify: true,
-            availableSites: availableSites,
-          }))
-        } catch (fetchError) {
-          // Handle fetch errors
-          console.error(fetchError)
-        }
+        refreshNetlifyStatus()
       }}
     >
       Turn on
@@ -296,6 +308,17 @@ function Embed() {
 
           if (success) {
             console.info('Success enabling authlify for site ', state.selectedSite.name)
+            setState(oldState => ({
+              ...oldState,
+              deployPending: oldState.selectedSite?.id || null,
+            }))
+
+            setTimeout(() => {
+              setState(oldState => ({
+                ...oldState,
+                deployPending: null,
+              }))
+            }, 5000)
           } else {
             console.warn('Unable to enable authlify for site ', state.selectedSite.name)
           }
@@ -333,7 +356,7 @@ function Embed() {
 
     state.siteOneGraphAuth.setToken({})
 
-    const newAuth = newAuthWithToken(null)
+    const newAuth = newInMemoryAuthWithToken(null)
 
     setState(oldState => ({ ...oldState, siteOneGraphAuth: newAuth }))
 
@@ -394,11 +417,20 @@ function Embed() {
         ) : null}
       </div>
       <div style={{ alignSelf: 'start', width: '100%', marginTop: '115px' }}>
+        {state.selectedSite && state.selectedSite.id === state.deployPending ? (
+          <p>
+            <strong>
+              Authlify enabled for {state.selectedSite.name}, it'll be available in your functions and site build in a
+              moment...
+            </strong>
+          </p>
+        ) : null}
         {siteHasEnabledAuthlify && state.selectedSite ? (
           <>
             <SiteAuth
               availableServices={state.availableServices}
               selectedSiteId={state.selectedSite.id}
+              selectedSiteName={state.selectedSite.name}
               siteEternalOneGraphToken={state.siteOneGraphAuth.accessToken().accessToken}
               onDisableAuthlifyForSite={onDisableAuthlifyForSite}
             />

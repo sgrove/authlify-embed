@@ -1,5 +1,5 @@
 // @ts-ignore
-import OneGraphAuth from 'onegraph-auth'
+import OneGraphAuth, { InMemoryStorage } from 'onegraph-auth'
 
 export const allowList = new Set(['github', 'spotify', 'salesforce'])
 
@@ -175,6 +175,24 @@ mutation DestroyTokenMutation($token: String!) {
     destroyToken(token: $token)
   }
 }
+
+mutation NetlifyTriggerFreshBuildMutation($path: String!) {
+  netlify {
+    makeRestCall {
+      post(
+        path: $path
+        jsonBody: { clear_cache: true }
+      ) {
+        jsonBody
+        response {
+          statusCode
+        }
+      }
+    }
+  }
+}
+
+
 `
 
 // @ts-ignore
@@ -230,6 +248,14 @@ export function executeSignOutServices(auth, services: string[]) {
 export function executeDestroyToken(auth, token: string) {
   return fetchOneGraph(auth, operationsDoc, 'DestroyTokenMutation', {
     token: token,
+  })
+}
+
+// @ts-ignore
+export function executeNetlifyTriggerFreshBuild(auth, siteId: string) {
+  const path = `/api/v1/sites/${siteId}/builds`
+  return fetchOneGraph(auth, operationsDoc, 'NetlifyTriggerFreshBuildMutation', {
+    path: path,
   })
 }
 
@@ -313,9 +339,10 @@ export const serviceImageUrl = (service: Keys, size = 50) => {
   return `//logo.clearbit.com/${lookup[0]}?size=${size}`
 }
 
-export const newAuthWithToken = (token: string | null) => {
+export const newInMemoryAuthWithToken = (token: string | null) => {
   const auth = new OneGraphAuth({
     appId: ONEGRAPH_APP_ID,
+    storage: new InMemoryStorage(),
   })
 
   if (token) {

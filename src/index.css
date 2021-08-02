@@ -12,3 +12,7 @@ body {
 .iframe-hack .iframe-hack-position {
   position: fixed;
 }
+
+.authlify input[type^='checkbox'] {
+  all: revert;
+}
