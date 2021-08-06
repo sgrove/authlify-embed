@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "prettier": "prettier --write \"src/**/*.{js,jsx,json,tsx,ts}\""
   },
   "dependencies": {
     "onegraph-auth": "^3.3.2",
