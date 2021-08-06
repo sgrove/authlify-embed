@@ -40,7 +40,7 @@ export const Dropdown = (props: DropdownProps) => {
         aria-haspopup="true"
         data-toggle="true"
         name="Options"
-        className="btn btn-default btn-secondary btn-secondary--standard"
+        className="btn btn-default btn-secondary btn-secondary--standard tw-whitespace-nowrap"
         type="button"
         onClick={() => setOpen(!open)}
       >

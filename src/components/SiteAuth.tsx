@@ -102,16 +102,6 @@ export function SiteAuth(props: Props) {
 
   return (
     <>
-      <button
-        className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
-        type="button"
-        onClick={async () => {
-          props.onDisableAuthlifyForSite(props.selectedSiteId)
-        }}
-      >
-        Disable Authlify for {props.selectedSiteName}
-      </button>
-
       <AuthTable
         availableServices={props.availableServices}
         selectedSiteId={props.selectedSiteId}
@@ -239,7 +229,14 @@ function AuthTable(props: AuthTableProps) {
 
   return (
     <>
-      <ul className="table-body">
+      <ul
+        className="card card-settings"
+        style={{
+          all: "revert",
+          padding: 0,
+          listStyle: "none",
+        }}
+      >
         {props.availableServices
           .filter(service => {
             if (props.search === null) {
@@ -297,8 +294,8 @@ function AuthTable(props: AuthTableProps) {
 
             return (
               <li key={service.slug}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px' }}>
-                  <div style={{ textAlign: 'left' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px 0', borderBottom: '1px solid #eee', borderTop: '1px solid #eee', marginTop: "24px" }}>
+                  <div style={{ textAlign: 'left', display: "flex", alignItems: "center", width: "100%" }}>
                     <img
                       alt={`${service.service} Logomark`}
                       // @ts-ignore: Safe
@@ -311,7 +308,7 @@ function AuthTable(props: AuthTableProps) {
                       }}
                     />
                     {service.friendlyServiceName} API
-                    <div style={{ textAlign: 'left', marginTop: '12px' }}>
+                    <div style={{ textAlign: 'left', marginLeft: 'auto' }}>
                       <button
                         className={
                           'btn btn-default btn-primary btn-primary--standard ' +
@@ -337,20 +334,16 @@ function AuthTable(props: AuthTableProps) {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    fontFamily: 'monospace',
-                    flexGrow: 1,
-                    paddingRight: '6px',
-                    paddingLeft: '12px',
-                  }}
-                >
+                <div className="table-body">
                   {availableScopes?.map(([category, scopes]) => {
                     return (
-                      <div style={{ padding: '6px' }}>
-                        <h3 style={{ fontWeight: 'bold' }}>{category}</h3>
-                        <div style={{ padding: '6px' }}>
+                      <dl>
+                        <dt>{category}</dt>
+                        <dd>
                           {scopes.map(scope => {
+                            const isSelected = !!state.newServiceScopes[service.service]?.has(scope.scope)
+                            const unchecked = "tw-w-[20px] tw-h-[20px] tw-p-0 tw-border tw-mr-1 tw-mt-[2px] tw-mb-0 tw-ml-[2px] tw-box-border tw-absolute tw-top-auto before:tw-content-empty before:tw-absolute before:tw-origin-top-left focus:tw-shadow-checkbox tw-cursor-pointer hover:tw-border-teal tw-border-gray focus:tw-border-gray focus:hover:tw-border-teal focus:hover:checked:tw-border-teal-darkest checked:tw-bg-teal-darker checked:tw-border-teal-darker focus:checked:tw-border-teal-darker hover:checked:tw-bg-teal-darkest hover:checked:tw-border-teal-darkest dark:hover:checked:tw-bg-teal dark:hover:checked:tw-border-teal tw-bg-transparent before:tw-h-[11px] before:tw-inline-block before:tw-w-[3px] before:tw-rounded-sm before:tw-left-[7px] before:tw-top-[13px] before:tw-transform before:tw-rotate-[-135deg] after:tw-w-[3px] after:tw-h-[7px] after:tw-rounded-sm after:tw-content-empty after:tw-absolute after:tw-top-[7px] after:tw-transform after:tw--rotate-45 after:tw-left-[3px] dark:after:tw-bg-transparent checked:before:tw-bg-gray-lightest checked:after:tw-bg-gray-lightest dark:checked:after:tw-bg-gray-darkest dark:checked:before:tw-bg-gray-darkest dark:checked:tw-bg-teal-lighter dark:checked:tw-border-teal-lighter"
+                            const checked = "tw-w-[20px] tw-h-[20px] tw-p-0 tw-border tw-mr-1 tw-mt-[2px] tw-mb-0 tw-ml-[2px] tw-box-border tw-absolute tw-top-auto before:tw-content-empty before:tw-absolute before:tw-origin-top-left focus:tw-shadow-checkbox tw-cursor-pointer hover:tw-border-teal tw-border-gray focus:tw-border-gray focus:hover:tw-border-teal focus:hover:checked:tw-border-teal-darkest checked:tw-bg-teal-darker checked:tw-border-teal-darker focus:checked:tw-border-teal-darker hover:checked:tw-bg-teal-darkest hover:checked:tw-border-teal-darkest dark:hover:checked:tw-bg-teal dark:hover:checked:tw-border-teal checked:focus:tw-shadow-checkbox tw-bg-teal-darker hover:tw-bg-teal-darkest hover:tw-border-teal-darkest checked:before:tw-bg-gray-lightest checked:after:tw-bg-gray-lightest dark:checked:tw-bg-teal-lighter dark:checked:tw-border-teal-lighter dark:checked:hover:tw-bg-teal dark:checked:hover:tw-border-teal before:tw-h-[11px] before:tw-inline-block before:tw-w-[3px] before:tw-rounded-sm before:tw-left-[7px] before:tw-top-[13px] before:tw-transform before:tw-rotate-[-135deg] after:tw-w-[3px] after:tw-h-[7px] after:tw-rounded-sm after:tw-content-empty after:tw-absolute after:tw-top-[7px] after:tw-transform after:tw--rotate-45 after:tw-left-[3px] dark:after:tw-bg-transparent checked:before:tw-bg-gray-lightest checked:after:tw-bg-gray-lightest dark:checked:after:tw-bg-gray-darkest dark:checked:before:tw-bg-gray-darkest dark:checked:tw-bg-teal-lighter dark:checked:tw-border-teal-lighter tw-bg-teal-darkest dark:tw-bg-gray-dark before:tw-bg-gray-lightest after:tw-bg-gray-lightest dark:before:tw-bg-gray-darkest checked:dark:before:tw-bg-gray-darkest dark:after:tw-bg-gray-darkest hover:checked:tw-bg-teal-darkest hover:checked:tw-border-teal-darkest"
                             return (
                               <label
                                 key={scope.display}
@@ -359,38 +352,33 @@ function AuthTable(props: AuthTableProps) {
                               >
                                 <p style={{ display: 'inline-block', minWidth: '200px' }}>
                                   <input
+                                    className={isSelected ? checked : unchecked}
                                     type="checkbox"
                                     key={scope.scope}
                                     value={scope.scope}
-                                    style={{
-                                      all: 'revert',
-                                    }}
                                     onChange={event =>
                                       event.target.checked
                                         ? addScope(service, scope.scope)
                                         : removeScope(service, scope.scope)
                                     }
-                                    checked={!!state.newServiceScopes[service.service]?.has(scope.scope)}
+                                    checked={isSelected}
                                   />
-                                  {scope.display}
+                                  <span className="tw-pl-[32px] tw-block tw-cursor-pointer tw-text-base tw-text-gray-darkest tw-font-semibold dark:tw-text-gray-lightest">
+                                    {scope.display}
+                                  </span>
                                 </p>
 
                                 <p
-                                  style={{
-                                    display: 'block',
-                                    paddingLeft: '6px',
-                                    borderLeft: '2px solid #ccc',
-                                    margin: '6px',
-                                    whiteSpace: 'pre-wrap',
-                                  }}
+                                  style={{ marginLeft: 32 }}
+                                  className="tw-text-muted tw-text-sm tw-ml-[32px] tw-mt-0 tw-text-gray-darker tw-font-regular dark:tw-text-gray-lighter"
                                 >
                                   {scope.description}
                                 </p>
                               </label>
                             )
                           })}
-                        </div>
-                      </div>
+                        </dd>
+                      </dl>
                     )
                   })}
                 </div>
