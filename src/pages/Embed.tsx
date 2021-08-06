@@ -388,15 +388,26 @@ function Embed() {
             </p>
           </div>
         </div>
-        <div className="actions" style={{ flexWrap: "nowrap" }}>{state.isLoggedIntoNetlify ? <>{siteSelectorButton} <button
-              className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
-              type="button"
-              onClick={async () => {
-                onDisableAuthlifyForSite(state.selectedSite.id)
-              }}
-            >
-              Disable
-            </button></> : enableButton}</div>
+        <div className="actions" style={{ flexWrap: 'nowrap' }}>
+          {state.isLoggedIntoNetlify ? (
+            <>
+              {siteSelectorButton}{' '}
+              <button
+                className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
+                type="button"
+                onClick={async () => {
+                  if (state.selectedSite) {
+                    onDisableAuthlifyForSite(state.selectedSite.id)
+                  }
+                }}
+              >
+                Disable
+              </button>
+            </>
+          ) : (
+            enableButton
+          )}
+        </div>
       </div>
       <div
         className="iframe-hack-position"
@@ -407,8 +418,7 @@ function Embed() {
           background: 'rgb(250,251,251)',
           zIndex: 99,
         }}
-      >
-      </div>
+      ></div>
       <div className="site-container" style={{ alignSelf: 'start', width: '100%' }}>
         {state.selectedSite && state.selectedSite.id === state.deployPending ? (
           <p>
