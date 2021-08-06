@@ -388,7 +388,15 @@ function Embed() {
             </p>
           </div>
         </div>
-        <div className="actions">{state.isLoggedIntoNetlify ? <>{siteSelectorButton}</> : enableButton}</div>
+        <div className="actions" style={{ flexWrap: "nowrap" }}>{state.isLoggedIntoNetlify ? <>{siteSelectorButton} <button
+              className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
+              type="button"
+              onClick={async () => {
+                onDisableAuthlifyForSite(state.selectedSite.id)
+              }}
+            >
+              Disable
+            </button></> : enableButton}</div>
       </div>
       <div
         className="iframe-hack-position"
@@ -400,24 +408,6 @@ function Embed() {
           zIndex: 99,
         }}
       >
-        {state.isLoggedIntoNetlify && state.selectedSite ? (
-          <input
-            style={{
-              width: '100%',
-              padding: '6px',
-              margin: '6px',
-            }}
-            placeholder="Search"
-            onChange={event => {
-              let value: string | null = event.target.value.trim()
-              if (value === '') {
-                value = null
-              }
-
-              setState(oldState => ({ ...oldState, search: value }))
-            }}
-          />
-        ) : null}
       </div>
       <div className="site-container" style={{ alignSelf: 'start', width: '100%' }}>
         {state.selectedSite && state.selectedSite.id === state.deployPending ? (
