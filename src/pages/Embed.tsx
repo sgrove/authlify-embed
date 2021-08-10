@@ -288,7 +288,7 @@ function Embed() {
         refreshNetlifyStatus()
       }}
     >
-      Turn on
+      Enable
     </button>
   )
 
@@ -328,7 +328,7 @@ function Embed() {
         }
       }}
     >
-      Turn on for {state.selectedSite.name}
+      Enable tokens for {state.selectedSite.name}
     </button>
   ) : null
 
@@ -384,7 +384,10 @@ function Embed() {
               Netlify Auth Management <small>(powered by OneGraph)</small>
             </h2>
             <p className="lab__desc">
-              Provision OAuth tokens with just a few clicks to use in in your Netlify functions and during site build.
+              Provisions OAuth tokens for use in Netlify functions and site builds.{' '}
+              <p className="after:tw-right-tiny dark:tw-bg-gray-darkest tw-w-full after:tw-content-arrow">
+                Learn more about Auth Management{' '}
+              </p>
             </p>
           </div>
         </div>
