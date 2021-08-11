@@ -1,7 +1,7 @@
 // @ts-ignore
 import OneGraphAuth, { InMemoryStorage } from 'onegraph-auth'
 
-export const allowList = new Set(['github', 'spotify', 'salesforce'])
+export const allowList = new Set(['github', 'spotify', 'salesforce', 'stripe'])
 
 export const oneGraphAuthlifyTokenEnvName = 'ONEGRAPH_AUTHLIFY_TOKEN'
 

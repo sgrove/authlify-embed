@@ -96,11 +96,8 @@ export function SiteAuth(props: Props) {
         allowList={allowList}
         loggedInServices={state.loggedInServices}
         onLogin={async (service: Service, scopes: Array<string> | undefined) => {
-          console.log('start login...')
           const temporaryAuth = newInMemoryAuthWithToken(props.siteEternalOneGraphToken)
-          console.log('Go go go!')
           await temporaryAuth.login(service.slug, scopes)
-          console.log("What's this?")
 
           const isLoggedIn = await temporaryAuth.isLoggedIn(service.slug)
 
@@ -325,7 +322,7 @@ function AuthTable(props: AuthTableProps) {
                     <img
                       alt={`${service.service} Logomark`}
                       // @ts-ignore: Safe
-                      src={service.logoUrl || serviceImageUrl(service.slug)}
+                      src={service.logoUrl}
                       style={{
                         width: '50px',
                         borderRadius: '6px',
@@ -345,7 +342,6 @@ function AuthTable(props: AuthTableProps) {
                         onClick={() => {
                           if (loggedIn) {
                             if (scopeSelectionChanged) {
-                              console.log('On login')
                               props.onLogin(service, currentDesiredScopes)
                             } else if (isPoisedForRemoval) {
                               setState(oldState => markServicePoisedForRemoval(oldState, service))
@@ -407,7 +403,7 @@ function AuthTable(props: AuthTableProps) {
                                     checked={isSelected || isRequired}
                                   />
                                   <span className="tw-pl-[32px] tw-block tw-cursor-pointer tw-text-base tw-text-gray-darkest tw-font-semibold dark:tw-text-gray-lightest">
-                                    {scope.display}
+                                    {scope.title || scope.display}
                                   </span>
                                 </p>
 
