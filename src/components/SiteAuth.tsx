@@ -38,7 +38,7 @@ export type LoggedInService = {
   bearerToken: string | null
   grantedScopes: Array<{
     scope: string
-  }>
+  }> | null
 }
 
 export type Site = {
@@ -173,7 +173,7 @@ function AuthTable(props: AuthTableProps) {
     const newServiceScopes: { [key: string]: Set<string> } = {}
 
     for (const service of loggedInServices) {
-      const scopes = service.grantedScopes
+      const scopes = service.grantedScopes || []
       for (const scope of scopes) {
         newServiceScopes[service.service] = newServiceScopes[service.service] || new Set()
         newServiceScopes[service.service].add(scope.scope)
