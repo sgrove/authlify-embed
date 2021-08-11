@@ -9,6 +9,7 @@ import {
   fetchNetlifyListSites,
   fetchServices,
   fetchSiteEnvVariables,
+  getNetlifyToken,
   newInMemoryAuthWithToken,
   oneGraphAuthlifyTokenEnvName,
   ONEGRAPH_APP_ID,
@@ -16,30 +17,18 @@ import {
 import { EnvVar, SiteAuth, Site, Service } from '../components/SiteAuth'
 import { Dropdown } from '../components/Base/Dropdown'
 
-/**
- * Steps:
- * [X] 1. Log into Netlify ("Enable addon")
- * [X] 2. Get list of sites
- * [X] 3. Allow user to select a site
- * [X] 4. After user selects a site, fetch its environment variables
- * [X] 5. See if the ONEGRAPH_AUTHLIFY_TOKEN is set
- * [X] 6. If not, prompt user to log into Netlify ("Enable for site")
- * [X] 7. With the ONEGRAPH_AUTLIFY_TOKEN, fetch the list of logged-in services
- * [X] 8. For any service logged into, create a new onegraph-auth for the flow
- * [X] 9. Set scopes for onegraph-auth
- * [X] 10. Sacrifice the token from #8 to the AUTHLIFY token
- * [X] 11. Any service log out should use the AUTHLIFY onegraph-auth and
- */
-
-const netlifyOneGraphAuth = new OneGraphAuth({
-  appId: ONEGRAPH_APP_ID,
-})
-
 const extractAuthlifyToken = (envVars: Array<EnvVar>): string | null => {
   return envVars.find(({ property }: EnvVar) => property === oneGraphAuthlifyTokenEnvName)?.value || null
 }
 
 const enableSiteAuthlify = async (site: Site): Promise<null> => {
+  const nfSessionToken = getNetlifyToken()
+
+  // We need to have an existing nf-session token to enable authlify
+  if (!nfSessionToken) {
+    return null
+  }
+
   const auth = new OneGraphAuth({
     appId: ONEGRAPH_APP_ID,
     storage: new InMemoryStorage(),
@@ -54,7 +43,7 @@ const enableSiteAuthlify = async (site: Site): Promise<null> => {
     const result = await executeCreateNetlifyPersonalToken(auth, authlifyToken)
     const eternalToken = result.data?.oneGraph?.createPersonalToken?.accessToken
     if (eternalToken) {
-      const envVarsRequest = await fetchSiteEnvVariables(auth, site.id)
+      const envVarsRequest = await fetchSiteEnvVariables(nfSessionToken, site.id)
 
       if (!!envVarsRequest.errors) {
         console.error('Error getting site envVars', envVarsRequest.errors)
@@ -70,7 +59,7 @@ const enableSiteAuthlify = async (site: Site): Promise<null> => {
 
       newEnvVars[oneGraphAuthlifyTokenEnvName] = eternalToken.token
 
-      await executeNetlifySetEnvMutation(auth, site.id, Object.entries(newEnvVars))
+      await executeNetlifySetEnvMutation(nfSessionToken, site.id, Object.entries(newEnvVars))
 
       return null
     }
@@ -78,9 +67,6 @@ const enableSiteAuthlify = async (site: Site): Promise<null> => {
 
   return null
 }
-
-// @ts-ignore
-window.oneGraphAuth = netlifyOneGraphAuth
 
 const authIcon = (
   <svg
@@ -104,7 +90,6 @@ const authIcon = (
 
 type State = {
   isLoggedIntoNetlify: boolean
-  netlifyOneGraphAuth: any
   availableServices: Array<Service>
   search: string | null
   availableSites: Array<Site>
@@ -116,7 +101,6 @@ type State = {
 function Embed() {
   const [state, setState] = React.useState<State>({
     isLoggedIntoNetlify: false,
-    netlifyOneGraphAuth: netlifyOneGraphAuth,
     availableServices: [],
     search: null,
     selectedSite: null,
@@ -126,11 +110,13 @@ function Embed() {
   })
 
   useEffect(() => {
-    fetchServices(state.netlifyOneGraphAuth).then(async result => {
+    fetchServices().then(async result => {
       const services = result.data?.oneGraph?.services || []
       setState(oldState => ({ ...oldState, availableServices: services }))
 
-      const isLoggedIn = await netlifyOneGraphAuth.isLoggedIn('netlify')
+      const accessToken = getNetlifyToken()
+
+      const isLoggedIn = !!accessToken
       if (isLoggedIn) {
         setState(oldState => ({ ...oldState, isLoggedIntoNetlify: true }))
         refreshNetlifyStatus()
@@ -140,13 +126,13 @@ function Embed() {
 
   async function refreshNetlifyStatus() {
     try {
-      const loggedIn = await netlifyOneGraphAuth.isLoggedIn('netlify')
+      const accessToken = getNetlifyToken()
 
-      if (!loggedIn) {
+      if (!accessToken) {
         return
       }
 
-      const rawAvailableSites = await fetchNetlifyListSites(netlifyOneGraphAuth)
+      const rawAvailableSites = await fetchNetlifyListSites(accessToken)
 
       const availableSites = rawAvailableSites.data?.netlify?.sites.map((site: any): Site => {
         const authlifyToken =
@@ -182,7 +168,12 @@ function Embed() {
   }
 
   const refreshSiteEnvVariables = async (selectedSite: Site): Promise<boolean> => {
-    return fetchSiteEnvVariables(state.netlifyOneGraphAuth, selectedSite.id).then(result => {
+    const accessToken = getNetlifyToken()
+    if (!accessToken) {
+      return false
+    }
+
+    return fetchSiteEnvVariables(accessToken, selectedSite.id).then(result => {
       if (!result.errors) {
         const envVars = result.data?.netlify?.site?.buildSettings?.env || []
 
@@ -283,7 +274,7 @@ function Embed() {
       className="btn btn-default btn-secondary btn-secondary--standard"
       type="button"
       onClick={async () => {
-        await netlifyOneGraphAuth.login('netlify')
+        // TODO: Set launch darkly flag
 
         refreshNetlifyStatus()
       }}
@@ -300,9 +291,18 @@ function Embed() {
       className="btn btn-default btn-secondary btn-secondary--standard"
       type="button"
       onClick={async () => {
+        const accessToken = getNetlifyToken()
+
+        // We can't proceed unless we have a nf-session token
+        if (!accessToken) {
+          return
+        }
+
         if (state.selectedSite) {
           await enableSiteAuthlify(state.selectedSite)
+
           let attempts = 10
+
           // Handle the async nature of setting env vars and then seeing them show up
           // in a subsequent query
           const success = await repeatedlyRefreshSiteEnvVariables(attempts, 500, state.selectedSite)
@@ -314,7 +314,7 @@ function Embed() {
               deployPending: oldState.selectedSite?.id || null,
             }))
 
-            await executeNetlifyTriggerFreshBuild(netlifyOneGraphAuth, state.selectedSite.id)
+            await executeNetlifyTriggerFreshBuild(accessToken, state.selectedSite.id)
 
             setTimeout(() => {
               setState(oldState => ({
@@ -333,7 +333,12 @@ function Embed() {
   ) : null
 
   const onDisableAuthlifyForSite = async (siteId: string): Promise<null> => {
-    const envVarsRequest = await fetchSiteEnvVariables(netlifyOneGraphAuth, siteId)
+    const accessToken = getNetlifyToken()
+    if (!accessToken) {
+      return null
+    }
+
+    const envVarsRequest = await fetchSiteEnvVariables(accessToken, siteId)
 
     if (!!envVarsRequest.errors) {
       console.error('Error getting site envVars', envVarsRequest.errors)
@@ -349,13 +354,13 @@ function Embed() {
 
     let newEnvVars = currentEnvVars.filter(([property]) => property !== oneGraphAuthlifyTokenEnvName)
 
-    await executeNetlifySetEnvMutation(netlifyOneGraphAuth, siteId, newEnvVars)
+    await executeNetlifySetEnvMutation(accessToken, siteId, newEnvVars)
 
     if (!authlifyToken) {
       return null
     }
 
-    await executeDestroyToken(netlifyOneGraphAuth, authlifyToken)
+    await executeDestroyToken(authlifyToken)
 
     state.siteOneGraphAuth.setToken({})
 
@@ -369,7 +374,6 @@ function Embed() {
   return (
     <>
       <div
-        className="inline iframe-hack-position"
         style={{
           background: 'rgb(250,251,251)',
           top: '0px',
@@ -383,37 +387,36 @@ function Embed() {
             <h2 className="lab__name h3">
               Netlify Auth Management <small>(powered by OneGraph)</small>
             </h2>
-            <p className="lab__desc">
+            <div className="lab__desc">
               Provisions OAuth tokens for use in Netlify functions and site builds.{' '}
               <p className="after:tw-right-tiny dark:tw-bg-gray-darkest tw-w-full after:tw-content-arrow">
                 Learn more about Auth Management{' '}
               </p>
-            </p>
+            </div>
           </div>
-        </div>
-        <div className="actions" style={{ flexWrap: 'nowrap' }}>
-          {state.isLoggedIntoNetlify ? (
-            <>
-              {siteSelectorButton}{' '}
-              <button
-                className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
-                type="button"
-                onClick={async () => {
-                  if (state.selectedSite) {
-                    onDisableAuthlifyForSite(state.selectedSite.id)
-                  }
-                }}
-              >
-                Disable
-              </button>
-            </>
-          ) : (
-            enableButton
-          )}
+          <div className="actions" style={{ flexWrap: 'nowrap', marginRight: 'calc(0px - var(--tiny))' }}>
+            {state.isLoggedIntoNetlify ? (
+              <>
+                {siteSelectorButton}{' '}
+                <button
+                  className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
+                  type="button"
+                  onClick={async () => {
+                    if (state.selectedSite) {
+                      onDisableAuthlifyForSite(state.selectedSite.id)
+                    }
+                  }}
+                >
+                  Disable
+                </button>
+              </>
+            ) : (
+              enableButton
+            )}
+          </div>
         </div>
       </div>
       <div
-        className="iframe-hack-position"
         style={{
           alignSelf: 'start',
           width: '100%',

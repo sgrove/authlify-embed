@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { allowList, executeAddAuths, fetchLoggedInServices, newInMemoryAuthWithToken, serviceImageUrl } from '../lib'
+import { allowList, executeAddAuths, fetchLoggedInServices, newInMemoryAuthWithToken } from '../lib'
 
 function checkSetEquality(setA: Set<any>, setB: Set<any>) {
   if (setA.size !== setB.size) return false
@@ -134,6 +134,7 @@ export function SiteAuth(props: Props) {
 
 type AuthTableState = {
   newServiceScopes: { [key: string]: Set<string> }
+  confirmRemoveService: string | null
 }
 
 type AuthTableProps = {
@@ -149,7 +150,22 @@ type AuthTableProps = {
 function AuthTable(props: AuthTableProps) {
   const [state, setState] = React.useState<AuthTableState>({
     newServiceScopes: {},
+    confirmRemoveService: null,
   })
+
+  function markServicePoisedForRemoval(oldState: AuthTableState, service: Service) {
+    return {
+      ...oldState,
+      confirmRemoveService: service.service,
+    }
+  }
+
+  function unmarkServicePoisedForRemoval(oldState: AuthTableState) {
+    return {
+      ...oldState,
+      confirmRemoveService: null,
+    }
+  }
 
   /**
    * Build up a list of scopes that are selected:
@@ -176,7 +192,7 @@ function AuthTable(props: AuthTableProps) {
         continue
       }
       for (const scope of scopes) {
-        if (scope.isDefault) {
+        if (scope.isDefault || scope.isRequired) {
           newServiceScopes[service.service] = newServiceScopes[service.service] || new Set()
           newServiceScopes[service.service].add(scope.scope)
         }
@@ -204,10 +220,12 @@ function AuthTable(props: AuthTableProps) {
         newServiceScopes[service.service] = new Set([scope])
       }
 
-      return {
+      const newState = {
         ...oldState,
         newServiceScopes: { ...newServiceScopes },
       }
+
+      return unmarkServicePoisedForRemoval(newState)
     })
   }
 
@@ -220,10 +238,12 @@ function AuthTable(props: AuthTableProps) {
         newServiceScopes[service.service] = new Set([])
       }
 
-      return {
+      const newState = {
         ...oldState,
         newServiceScopes: { ...newServiceScopes },
       }
+
+      return unmarkServicePoisedForRemoval(newState)
     })
   }
 
@@ -292,6 +312,8 @@ function AuthTable(props: AuthTableProps) {
                 ? undefined
                 : [...state.newServiceScopes[service.service]]
 
+            const isPoisedForRemoval = state.confirmRemoveService === service.service
+
             return (
               <li key={service.slug}>
                 <div
@@ -326,16 +348,25 @@ function AuthTable(props: AuthTableProps) {
                         type="button"
                         style={{ alignSelf: 'end', marginRight: '6px' }}
                         onClick={() => {
-                          loggedIn
-                            ? scopeSelectionChanged
-                              ? props.onLogin(service, currentDesiredScopes)
-                              : props.onLogout(service)
-                            : props.onLogin(service, currentDesiredScopes)
+                          if (loggedIn) {
+                            if (scopeSelectionChanged) {
+                              props.onLogin(service, currentDesiredScopes)
+                            } else if (isPoisedForRemoval) {
+                              setState(oldState => markServicePoisedForRemoval(oldState, service))
+                              props.onLogout(service)
+                            } else {
+                              setState(oldState => markServicePoisedForRemoval(oldState, service))
+                            }
+                          } else {
+                            props.onLogin(service, currentDesiredScopes)
+                          }
                         }}
                       >
                         {loggedIn
                           ? scopeSelectionChanged
                             ? `Update ${service.friendlyServiceName} scopes`
+                            : isPoisedForRemoval
+                            ? `Really remove ${service.friendlyServiceName}? Your site may stop working.`
                             : `Remove ${service.friendlyServiceName}`
                           : `Add ${service.friendlyServiceName}`}
                       </button>
@@ -346,11 +377,12 @@ function AuthTable(props: AuthTableProps) {
                 <div className="table-body">
                   {availableScopes?.map(([category, scopes]) => {
                     return (
-                      <dl>
+                      <dl key={category}>
                         <dt>{category}</dt>
                         <dd>
                           {scopes.map(scope => {
                             const isSelected = !!state.newServiceScopes[service.service]?.has(scope.scope)
+                            const isRequired = scope.isRequired
                             const unchecked =
                               'tw-w-[20px] tw-h-[20px] tw-p-0 tw-border tw-mr-1 tw-mt-[2px] tw-mb-0 tw-ml-[2px] tw-box-border tw-absolute tw-top-auto before:tw-content-empty before:tw-absolute before:tw-origin-top-left focus:tw-shadow-checkbox tw-cursor-pointer hover:tw-border-teal tw-border-gray focus:tw-border-gray focus:hover:tw-border-teal focus:hover:checked:tw-border-teal-darkest checked:tw-bg-teal-darker checked:tw-border-teal-darker focus:checked:tw-border-teal-darker hover:checked:tw-bg-teal-darkest hover:checked:tw-border-teal-darkest dark:hover:checked:tw-bg-teal dark:hover:checked:tw-border-teal tw-bg-transparent before:tw-h-[11px] before:tw-inline-block before:tw-w-[3px] before:tw-rounded-sm before:tw-left-[7px] before:tw-top-[13px] before:tw-transform before:tw-rotate-[-135deg] after:tw-w-[3px] after:tw-h-[7px] after:tw-rounded-sm after:tw-content-empty after:tw-absolute after:tw-top-[7px] after:tw-transform after:tw--rotate-45 after:tw-left-[3px] dark:after:tw-bg-transparent checked:before:tw-bg-gray-lightest checked:after:tw-bg-gray-lightest dark:checked:after:tw-bg-gray-darkest dark:checked:before:tw-bg-gray-darkest dark:checked:tw-bg-teal-lighter dark:checked:tw-border-teal-lighter'
                             const checked =
@@ -367,12 +399,16 @@ function AuthTable(props: AuthTableProps) {
                                     type="checkbox"
                                     key={scope.scope}
                                     value={scope.scope}
-                                    onChange={event =>
+                                    onChange={event => {
+                                      if (scope.isRequired) {
+                                        return
+                                      }
+
                                       event.target.checked
                                         ? addScope(service, scope.scope)
                                         : removeScope(service, scope.scope)
-                                    }
-                                    checked={isSelected}
+                                    }}
+                                    checked={isSelected || isRequired}
                                   />
                                   <span className="tw-pl-[32px] tw-block tw-cursor-pointer tw-text-base tw-text-gray-darkest tw-font-semibold dark:tw-text-gray-lightest">
                                     {scope.display}

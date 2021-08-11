@@ -10,10 +10,11 @@ export const ONEGRAPH_APP_ID = '4d3de9a5-722f-4d27-9c96-2ac43c93c004'
 // This setup is only needed once per application
 // @ts-ignore
 export async function fetchOneGraph(auth, operationsDoc, operationName, variables) {
+  const authHeaders = auth?.authHeaders() || {}
   const result = await fetch('https://serve.onegraph.com/graphql?app_id=4d3de9a5-722f-4d27-9c96-2ac43c93c004', {
     method: 'POST',
     headers: {
-      ...auth.authHeaders(),
+      ...authHeaders,
     },
     body: JSON.stringify({
       query: operationsDoc,
@@ -26,8 +27,13 @@ export async function fetchOneGraph(auth, operationsDoc, operationName, variable
 }
 
 const operationsDoc = `
-query SiteEnvVariables($id: String!) {
-  netlify {
+query SiteEnvVariables(
+  $id: String!
+  $oauthToken: String!
+) {
+  netlify(
+    auths: { netlifyAuth: { oauthToken: $oauthToken } }
+  ) {
     site(id: $id) {
       id
       name
@@ -41,8 +47,14 @@ query SiteEnvVariables($id: String!) {
   }
 }
 
-mutation NetlifySetEnvMutation($path: String! $envObject: JSON!) {
-  netlify {
+mutation NetlifySetEnvMutation(
+  $path: String!
+  $envObject: JSON!
+  $oauthToken: String!
+) {
+  netlify(
+    auths: { netlifyAuth: { oauthToken: $oauthToken } }
+  ) {
     makeRestCall {
       patch(
         path: $path
@@ -106,8 +118,12 @@ query FindLoggedInServicesQuery {
   }
 }
 
-query NetlifyListSites {
-  netlify {
+query NetlifyListSitesQuery(
+  $oauthToken: String!
+) {
+  netlify(
+    auths: { netlifyAuth: { oauthToken: $oauthToken } }
+  ) {
     sites {
       id
       name
@@ -176,13 +192,15 @@ mutation DestroyTokenMutation($token: String!) {
   }
 }
 
-mutation NetlifyTriggerFreshBuildMutation($path: String!) {
-  netlify {
+mutation NetlifyTriggerFreshBuildMutation(
+  $path: String!
+  $oauthToken: String!
+) {
+  netlify(
+    auths: { netlifyAuth: { oauthToken: $oauthToken } }
+  ) {
     makeRestCall {
-      post(
-        path: $path
-        jsonBody: { clear_cache: true }
-      ) {
+      post(path: $path, jsonBody: { clear_cache: true }) {
         jsonBody
         response {
           statusCode
@@ -191,25 +209,27 @@ mutation NetlifyTriggerFreshBuildMutation($path: String!) {
     }
   }
 }
-
-
 `
 
 // @ts-ignore
-export function fetchSiteEnvVariables(auth, id: string) {
-  return fetchOneGraph(auth, operationsDoc, 'SiteEnvVariables', { id: id })
+export function fetchSiteEnvVariables(accessToken: string, id: string) {
+  return fetchOneGraph(null, operationsDoc, 'SiteEnvVariables', { id: id, oauthToken: accessToken })
 }
 
 // @ts-ignore
-export function executeNetlifySetEnvMutation(auth, siteId: string, envVars: Array<[string, string]>) {
+export function executeNetlifySetEnvMutation(accessToken: string, siteId: string, envVars: Array<[string, string]>) {
   const path = `/api/v1/sites/${siteId}`
   const envObject = Object.fromEntries(envVars)
-  return fetchOneGraph(auth, operationsDoc, 'NetlifySetEnvMutation', { path: path, envObject: envObject })
+  return fetchOneGraph(null, operationsDoc, 'NetlifySetEnvMutation', {
+    path: path,
+    envObject: envObject,
+    oauthToken: accessToken,
+  })
 }
 
 // @ts-ignore
-export function fetchServices(auth) {
-  return fetchOneGraph(auth, operationsDoc, 'ListServicesQuery', {})
+export function fetchServices() {
+  return fetchOneGraph(null, operationsDoc, 'ListServicesQuery', {})
 }
 
 // @ts-ignore
@@ -218,8 +238,10 @@ export function fetchLoggedInServices(auth) {
 }
 
 // @ts-ignore
-export function fetchNetlifyListSites(auth) {
-  return fetchOneGraph(auth, operationsDoc, 'NetlifyListSites', {})
+export function fetchNetlifyListSites(oauthToken: string) {
+  return fetchOneGraph(null, operationsDoc, 'NetlifyListSitesQuery', {
+    oauthToken: oauthToken,
+  })
 }
 
 // @ts-ignore
@@ -245,16 +267,17 @@ export function executeSignOutServices(auth, services: string[]) {
 }
 
 // @ts-ignore
-export function executeDestroyToken(auth, token: string) {
-  return fetchOneGraph(auth, operationsDoc, 'DestroyTokenMutation', {
+export function executeDestroyToken(token: string) {
+  return fetchOneGraph(null, operationsDoc, 'DestroyTokenMutation', {
     token: token,
   })
 }
 
 // @ts-ignore
-export function executeNetlifyTriggerFreshBuild(auth, siteId: string) {
+export function executeNetlifyTriggerFreshBuild(accessToken: string, siteId: string) {
   const path = `/api/v1/sites/${siteId}/builds`
-  return fetchOneGraph(auth, operationsDoc, 'NetlifyTriggerFreshBuildMutation', {
+  return fetchOneGraph(null, operationsDoc, 'NetlifyTriggerFreshBuildMutation', {
+    oauthToken: accessToken,
     path: path,
   })
 }
@@ -328,16 +351,6 @@ const ServiceLookup = {
   firebase: ['firebase.me', 'Firebase'],
   rss: ['rss.com', 'RSS'],
 }
-type Keys = keyof typeof ServiceLookup
-
-export const serviceImageUrl = (service: Keys, size = 50) => {
-  const lookup = ServiceLookup[service]
-  if (!lookup) {
-    return '//logo.clearbit.com/netlify'
-  }
-
-  return `//logo.clearbit.com/${lookup[0]}?size=${size}`
-}
 
 export const newInMemoryAuthWithToken = (token: string | null) => {
   const auth = new OneGraphAuth({
@@ -350,4 +363,13 @@ export const newInMemoryAuthWithToken = (token: string | null) => {
   }
 
   return auth
+}
+
+export const getNetlifyToken = (): string | null => {
+  const token = localStorage.getItem('nf-session')
+  if (token) {
+    const parsed = JSON.parse(token)
+    return parsed.access_token
+  }
+  return null
 }
