@@ -217,9 +217,13 @@ export function fetchSiteEnvVariables(accessToken: string, id: string) {
 }
 
 // @ts-ignore
-export function executeNetlifySetEnvMutation(accessToken: string, siteId: string, envVars: Array<[string, string]>) {
+export function executeNetlifySetEnvMutation(
+  accessToken: string,
+  siteId: string,
+  envObject: { [key: string]: string },
+) {
   const path = `/api/v1/sites/${siteId}`
-  const envObject = Object.fromEntries(envVars)
+
   return fetchOneGraph(null, operationsDoc, 'NetlifySetEnvMutation', {
     path: path,
     envObject: envObject,
@@ -372,4 +376,16 @@ export const getNetlifyToken = (): string | null => {
     return parsed.access_token
   }
   return null
+}
+
+// Polyfills
+// Netlify probably has the equivalent of this
+export const objectEntries = (obj: any): Array<[string | symbol, any]> =>
+  Reflect.ownKeys(obj).map(key => [key, obj[key]])
+
+// Netlify probably has the equivalent of this
+export const objectFromEntries = (entries: Array<[string | symbol, any]>) => {
+  const obj = {}
+  entries.forEach(([key, value]) => (obj[key] = value))
+  return obj
 }

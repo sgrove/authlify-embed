@@ -7,19 +7,6 @@ function checkSetEquality(setA: Set<any>, setB: Set<any>) {
   return true
 }
 
-function setDifference(setA: Set<any>, setB: Set<any>) {
-  return new Set([...setA].filter(x => !setB.has(x)))
-}
-
-// This function replaces all but the last four digits of a string with zeroes
-const sanitizeToken = (str: string, length = 16): string => {
-  const len = str.length
-  const displayed = len > 4 ? str.substr(len - 4, len) : str
-
-  const padLength = length - displayed.length
-  return displayed.padStart(padLength, '*')
-}
-
 export type EnvVar = {
   property: string
   value: string
@@ -109,8 +96,11 @@ export function SiteAuth(props: Props) {
         allowList={allowList}
         loggedInServices={state.loggedInServices}
         onLogin={async (service: Service, scopes: Array<string> | undefined) => {
+          console.log('start login...')
           const temporaryAuth = newInMemoryAuthWithToken(props.siteEternalOneGraphToken)
+          console.log('Go go go!')
           await temporaryAuth.login(service.slug, scopes)
+          console.log("What's this?")
 
           const isLoggedIn = await temporaryAuth.isLoggedIn(service.slug)
 
@@ -121,6 +111,11 @@ export function SiteAuth(props: Props) {
               state.oneGraphAuth.setToken({ accessToken: eternalToken })
               refreshLoggedInServices(state.oneGraphAuth)
             }
+          } else {
+            console.warn(
+              'TODO Notification alert:',
+              `Unable to log into ${service.friendlyServiceName}, please try again.`,
+            )
           }
         }}
         onLogout={async (service: Service) => {
@@ -350,6 +345,7 @@ function AuthTable(props: AuthTableProps) {
                         onClick={() => {
                           if (loggedIn) {
                             if (scopeSelectionChanged) {
+                              console.log('On login')
                               props.onLogin(service, currentDesiredScopes)
                             } else if (isPoisedForRemoval) {
                               setState(oldState => markServicePoisedForRemoval(oldState, service))

@@ -11,6 +11,7 @@ import {
   fetchSiteEnvVariables,
   getNetlifyToken,
   newInMemoryAuthWithToken,
+  objectFromEntries,
   oneGraphAuthlifyTokenEnvName,
   ONEGRAPH_APP_ID,
 } from '../lib'
@@ -55,11 +56,11 @@ const enableSiteAuthlify = async (site: Site): Promise<null> => {
           return [property, value]
         }) || []
 
-      let newEnvVars = Object.fromEntries(currentEnvVars)
+      let newEnvVars = objectFromEntries(currentEnvVars)
 
       newEnvVars[oneGraphAuthlifyTokenEnvName] = eternalToken.token
 
-      await executeNetlifySetEnvMutation(nfSessionToken, site.id, Object.entries(newEnvVars))
+      await executeNetlifySetEnvMutation(nfSessionToken, site.id, newEnvVars)
 
       return null
     }
@@ -269,20 +270,6 @@ function Embed() {
     />
   )
 
-  const enableButton = (
-    <button
-      className="btn btn-default btn-secondary btn-secondary--standard"
-      type="button"
-      onClick={async () => {
-        // TODO: Set launch darkly flag
-
-        refreshNetlifyStatus()
-      }}
-    >
-      Enable
-    </button>
-  )
-
   const siteHasEnabledAuthlify =
     state.isLoggedIntoNetlify && !!state.selectedSite?.id && !!state.siteOneGraphAuth?.accessToken()?.accessToken
 
@@ -291,6 +278,7 @@ function Embed() {
       className="btn btn-default btn-secondary btn-secondary--standard"
       type="button"
       onClick={async () => {
+        // TODO: Set launch darkly flag
         const accessToken = getNetlifyToken()
 
         // We can't proceed unless we have a nf-session token
@@ -328,7 +316,7 @@ function Embed() {
         }
       }}
     >
-      Enable tokens for {state.selectedSite.name}
+      Enable tokens for <span style={{ whiteSpace: 'nowrap' }}>{state.selectedSite.name}</span>
     </button>
   ) : null
 
@@ -354,7 +342,9 @@ function Embed() {
 
     let newEnvVars = currentEnvVars.filter(([property]) => property !== oneGraphAuthlifyTokenEnvName)
 
-    await executeNetlifySetEnvMutation(accessToken, siteId, newEnvVars)
+    const newEnvObject = objectFromEntries(newEnvVars)
+
+    await executeNetlifySetEnvMutation(accessToken, siteId, newEnvObject)
 
     if (!authlifyToken) {
       return null
@@ -394,24 +384,22 @@ function Embed() {
               </p>
             </div>
           </div>
-          <div className="actions" style={{ flexWrap: 'nowrap', marginRight: 'calc(0px - var(--tiny))' }}>
-            {state.isLoggedIntoNetlify ? (
-              <>
-                {siteSelectorButton}{' '}
-                <button
-                  className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
-                  type="button"
-                  onClick={async () => {
-                    if (state.selectedSite) {
-                      onDisableAuthlifyForSite(state.selectedSite.id)
-                    }
-                  }}
-                >
-                  Disable
-                </button>
-              </>
+          <div className="actions" style={{ flexWrap: 'wrap', marginRight: 'calc(0px - var(--tiny))' }}>
+            {siteSelectorButton}
+            {state.isLoggedIntoNetlify && siteHasEnabledAuthlify && state.selectedSite ? (
+              <button
+                className="btn btn-default btn-primary btn-primary--standard btn-primary--danger"
+                type="button"
+                onClick={async () => {
+                  if (state.selectedSite) {
+                    onDisableAuthlifyForSite(state.selectedSite.id)
+                  }
+                }}
+              >
+                Disable
+              </button>
             ) : (
-              enableButton
+              enableAuthlifyForSiteButton
             )}
           </div>
         </div>
@@ -444,9 +432,7 @@ function Embed() {
               onDisableAuthlifyForSite={onDisableAuthlifyForSite}
             />
           </>
-        ) : (
-          enableAuthlifyForSiteButton
-        )}
+        ) : null}
       </div>
     </>
   )
