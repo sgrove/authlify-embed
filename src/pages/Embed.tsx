@@ -188,7 +188,8 @@ function Embed() {
           storage: new InMemoryStorage(),
         })
 
-        siteOneGraphAuth.setToken({ accessToken: authlifyToken, wtf: true })
+        const fiveMinutes = 5 * 60 * 1000
+        siteOneGraphAuth.setToken({ accessToken: authlifyToken, expireDate: Date.now() + fiveMinutes })
 
         const newSelectedSite: Site = {
           ...selectedSite,

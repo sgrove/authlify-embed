@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { allowList, executeAddAuths, fetchLoggedInServices, newInMemoryAuthWithToken } from '../lib'
+import { OAuthError } from 'onegraph-auth'
 
 function checkSetEquality(setA: Set<any>, setB: Set<any>) {
   if (setA.size !== setB.size) return false
@@ -97,22 +98,28 @@ export function SiteAuth(props: Props) {
         loggedInServices={state.loggedInServices}
         onLogin={async (service: Service, scopes: Array<string> | undefined) => {
           const temporaryAuth = newInMemoryAuthWithToken(props.siteEternalOneGraphToken)
-          await temporaryAuth.login(service.slug, scopes)
 
-          const isLoggedIn = await temporaryAuth.isLoggedIn(service.slug)
-
-          if (isLoggedIn) {
-            const eternalToken = props.siteEternalOneGraphToken
-            if (eternalToken) {
-              await executeAddAuths(temporaryAuth, eternalToken, temporaryAuth.accessToken().accessToken)
-              state.oneGraphAuth.setToken({ accessToken: eternalToken })
-              refreshLoggedInServices(state.oneGraphAuth)
+          try {
+            await temporaryAuth.login(service.slug as any, scopes)
+            const isLoggedIn = await temporaryAuth.isLoggedIn(service.slug as any)
+            const accessToken = temporaryAuth.accessToken()?.accessToken
+            if (isLoggedIn && accessToken) {
+              const eternalToken = props.siteEternalOneGraphToken
+              if (eternalToken) {
+                await executeAddAuths(temporaryAuth, eternalToken, accessToken)
+                state.oneGraphAuth.setToken({ accessToken: eternalToken })
+                refreshLoggedInServices(state.oneGraphAuth)
+              }
             }
-          } else {
-            console.warn(
-              'TODO Notification alert:',
-              `Unable to log into ${service.friendlyServiceName}, please try again.`,
-            )
+          } catch (e) {
+            if (e instanceof OAuthError) {
+              console.warn(
+                'TODO: show notification for failed to log in ',
+                e.oauthError.error_description || e.oauthError.error,
+              )
+            } else {
+              console.error('Unknown error ' + e.message)
+            }
           }
         }}
         onLogout={async (service: Service) => {

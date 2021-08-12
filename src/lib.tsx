@@ -363,7 +363,8 @@ export const newInMemoryAuthWithToken = (token: string | null) => {
   })
 
   if (token) {
-    auth.setToken({ accessToken: token })
+    const fiveMinutes = 5 * 60 * 1000
+    auth.setToken({ accessToken: token, expireDate: Date.now() + fiveMinutes })
   }
 
   return auth
